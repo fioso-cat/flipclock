@@ -1,0 +1,6 @@
+{
+  "name": "Ambient Flip Visualizer",
+  "description": "A minimal Flip Clock combined with a realtime audio-reactive visualizer and customizable ambient presets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

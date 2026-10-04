@@ -1,4 +1,4 @@
-import { AudioSettings, AudioAnalysis, AudioDeviceInfo } from '../types';
+import { AudioSettings, AudioAnalysis } from '../types';
 
 export class AudioManager {
   private audioContext: AudioContext | null = null;
@@ -6,11 +6,9 @@ export class AudioManager {
   private gainNode: GainNode | null = null;
   private mediaStream: MediaStream | null = null;
   private sourceNode: MediaStreamAudioSourceNode | AudioNode | null = null;
-  
+
   // Demo Synth Generator
   private demoTimer: number | null = null;
-  private demoOscillators: OscillatorNode[] = [];
-  private demoGainNodes: GainNode[] = [];
 
   // Data Buffers
   private frequencyData: Uint8Array = new Uint8Array(512);
@@ -24,48 +22,18 @@ export class AudioManager {
 
   // Status
   public status: 'idle' | 'capturing' | 'silent' | 'denied' | 'unavailable' = 'idle';
-  public currentDeviceLabel = 'No Audio Device Selected';
+  public currentDeviceLabel = 'Screen audio disconnected';
   public errorMessage: string | null = null;
 
-  private onDeviceChangeCallback?: () => void;
+  private onStatusChangeCallback?: () => void;
 
-  constructor() {
-    this.setupDeviceChangeListener();
+  public setOnStatusChangeListener(callback: () => void) {
+    this.onStatusChangeCallback = callback;
   }
 
-  private setupDeviceChangeListener() {
-    if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
-      navigator.mediaDevices.addEventListener('devicechange', () => {
-        if (this.onDeviceChangeCallback) {
-          this.onDeviceChangeCallback();
-        }
-      });
-    }
-  }
-
-  public setOnDeviceChangeListener(callback: () => void) {
-    this.onDeviceChangeCallback = callback;
-  }
-
-  /**
-   * Enumerate available audio input devices.
-   */
-  public async getAudioDevices(): Promise<AudioDeviceInfo[]> {
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-      return [];
-    }
-
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const audioInputs = devices.filter((d) => d.kind === 'audioinput');
-
-      return audioInputs.map((d, index) => ({
-        deviceId: d.deviceId,
-        label: d.label || `Audio Input Device ${index + 1} (Grant permission to view name)`,
-      }));
-    } catch (err) {
-      console.warn('Error enumerating audio devices:', err);
-      return [];
+  private notifyStatusChange() {
+    if (this.onStatusChangeCallback) {
+      this.onStatusChangeCallback();
     }
   }
 
@@ -74,7 +42,10 @@ export class AudioManager {
    */
   public async ensureContext(): Promise<AudioContext> {
     if (!this.audioContext) {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext;
       this.audioContext = new AudioCtx();
     }
 
@@ -86,94 +57,172 @@ export class AudioManager {
   }
 
   /**
-   * Initialize audio processing chain with given settings.
+   * Start screen capture audio using getDisplayMedia and extracting ONLY the audio track.
    */
-  public async initAudio(settings: AudioSettings): Promise<boolean> {
+  public async startScreenAudio(settings: AudioSettings): Promise<boolean> {
     try {
       const ctx = await this.ensureContext();
-
-      // Clean up previous source / stream / synth
       this.stop();
 
       // Create AnalyserNode & GainNode
       this.analyser = ctx.createAnalyser();
       this.analyser.fftSize = settings.fftSize || 1024;
-      this.analyser.smoothingTimeConstant = Math.min(0.95, Math.max(0.1, settings.smoothing));
+      this.analyser.smoothingTimeConstant = Math.min(
+        0.95,
+        Math.max(0.1, settings.smoothing)
+      );
 
       this.gainNode = ctx.createGain();
       this.gainNode.gain.value = settings.isMuted ? 0 : settings.gain;
 
-      // Allocate typed arrays
       const binCount = this.analyser.frequencyBinCount;
       this.frequencyData = new Uint8Array(binCount);
       this.timeDomainData = new Uint8Array(binCount);
 
-      if (settings.mode === 'demo_synth') {
-        this.startDemoSynth(ctx);
-        this.status = 'capturing';
-        this.currentDeviceLabel = 'Built-in Audio Synth Demo';
-        this.errorMessage = null;
-        return true;
-      }
-
-      if (!settings.deviceId) {
-        this.status = 'idle';
-        this.currentDeviceLabel = 'No Device Selected';
+      if (
+        typeof navigator === 'undefined' ||
+        !navigator.mediaDevices ||
+        !navigator.mediaDevices.getDisplayMedia
+      ) {
+        this.status = 'unavailable';
+        this.errorMessage =
+          'Screen audio capture (getDisplayMedia) is not supported in this browser.';
+        this.notifyStatusChange();
         return false;
       }
 
-      // Request media stream from device
-      const constraints: MediaStreamConstraints = {
-        audio: settings.deviceId === 'default'
-          ? true
-          : { deviceId: { exact: settings.deviceId } },
-      };
-
+      let rawStream: MediaStream;
       try {
-        this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-        
-        // Find label
-        const track = this.mediaStream.getAudioTracks()[0];
-        if (track) {
-          this.currentDeviceLabel = track.label || 'Connected Audio Device';
-        }
-
-        const source = ctx.createMediaStreamSource(this.mediaStream);
-        this.sourceNode = source;
-
-        source.connect(this.gainNode);
-        this.gainNode.connect(this.analyser);
-
-        this.status = 'capturing';
-        this.errorMessage = null;
-        return true;
+        rawStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
+        });
       } catch (err: unknown) {
         const error = err as Error;
-        console.warn('GUM error:', error);
-        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-          this.status = 'denied';
-          this.errorMessage = 'Microphone / Capture permission was denied by user or browser.';
+        if (
+          error.name === 'NotAllowedError' ||
+          error.name === 'PermissionDeniedError' ||
+          error.name === 'AbortError'
+        ) {
+          this.status = 'idle';
+          this.currentDeviceLabel = 'Screen share cancelled';
+          this.errorMessage =
+            'Screen sharing was cancelled. Click "Share Screen Audio" when ready.';
         } else {
           this.status = 'unavailable';
-          this.errorMessage = `Unable to connect to audio device: ${error.message || 'Device busy or disconnected.'}`;
+          this.errorMessage = `Screen capture failed: ${error.message || 'Unknown error'}`;
         }
+        this.notifyStatusChange();
         return false;
       }
+
+      // Check for audio tracks
+      const audioTracks = rawStream.getAudioTracks();
+
+      // STOP ALL VIDEO TRACKS IMMEDIATELY - We ONLY want audio
+      rawStream.getVideoTracks().forEach((vt) => vt.stop());
+
+      // CRITICAL REQUIREMENT: Check if audio track exists
+      if (audioTracks.length === 0) {
+        // Stop any remaining tracks
+        rawStream.getTracks().forEach((t) => t.stop());
+
+        this.status = 'unavailable';
+        this.currentDeviceLabel = 'Audio not shared';
+        this.errorMessage =
+          "Audio sharing is required. Please share your screen/window/tab again and enable 'Share audio'.";
+        this.notifyStatusChange();
+        return false;
+      }
+
+      const audioTrack = audioTracks[0];
+
+      // Handle user clicking the browser "Stop sharing" bar
+      audioTrack.onended = () => {
+        this.stop();
+        this.status = 'idle';
+        this.currentDeviceLabel = 'Screen audio disconnected';
+        this.errorMessage = null;
+        this.notifyStatusChange();
+      };
+
+      const audioStream = new MediaStream([audioTrack]);
+      this.mediaStream = audioStream;
+
+      const source = ctx.createMediaStreamSource(audioStream);
+      this.sourceNode = source;
+
+      source.connect(this.gainNode);
+      this.gainNode.connect(this.analyser);
+
+      this.status = 'capturing';
+      this.currentDeviceLabel = audioTrack.label || 'Screen Audio Connected';
+      this.errorMessage = null;
+      this.notifyStatusChange();
+      return true;
     } catch (err: unknown) {
       const error = err as Error;
       this.status = 'unavailable';
-      this.errorMessage = `Audio initialization failed: ${error.message}`;
+      this.errorMessage = `Audio setup failed: ${error.message}`;
+      this.notifyStatusChange();
       return false;
     }
   }
 
   /**
-   * Start built-in audio synth generator with kick, snare, sub-bass, and lead chord synth for live demo testing!
+   * Initialize audio processing chain with given settings.
+   */
+  public async initAudio(settings: AudioSettings): Promise<boolean> {
+    if (settings.mode === 'demo_synth') {
+      const ctx = await this.ensureContext();
+      this.stop();
+
+      this.analyser = ctx.createAnalyser();
+      this.analyser.fftSize = settings.fftSize || 1024;
+      this.analyser.smoothingTimeConstant = Math.min(
+        0.95,
+        Math.max(0.1, settings.smoothing)
+      );
+
+      this.gainNode = ctx.createGain();
+      this.gainNode.gain.value = settings.isMuted ? 0 : settings.gain;
+
+      const binCount = this.analyser.frequencyBinCount;
+      this.frequencyData = new Uint8Array(binCount);
+      this.timeDomainData = new Uint8Array(binCount);
+
+      this.startDemoSynth(ctx);
+      this.status = 'capturing';
+      this.currentDeviceLabel = 'Built-in Audio Synth Demo';
+      this.errorMessage = null;
+      this.notifyStatusChange();
+      return true;
+    }
+
+    if (settings.mode === 'screen_audio') {
+      if (
+        this.status === 'capturing' &&
+        this.mediaStream &&
+        this.mediaStream.getAudioTracks().length > 0
+      ) {
+        this.updateSettings(settings);
+        return true;
+      }
+      this.status = 'idle';
+      this.currentDeviceLabel = 'Screen audio disconnected';
+      this.notifyStatusChange();
+      return false;
+    }
+
+    return false;
+  }
+
+  /**
+   * Start built-in audio synth generator with kick, snare, sub-bass, and lead chord synth.
    */
   private startDemoSynth(ctx: AudioContext) {
     if (!this.analyser || !this.gainNode) return;
 
-    // Create a rhythmic synth loop using Web Audio nodes
     const synthMasterGain = ctx.createGain();
     synthMasterGain.gain.value = 0.5;
     synthMasterGain.connect(this.gainNode);
@@ -218,8 +267,8 @@ export class AudioManager {
         snareOsc.stop(now + 0.16);
       }
 
-      // Synth chord notes on every step
-      const chordNotes = [220, 261.63, 329.63, 392.00, 440, 523.25]; // Am7 / C / Em
+      // Synth chord notes
+      const chordNotes = [220, 261.63, 329.63, 392.0, 440, 523.25];
       const chordFreq = chordNotes[(step * 2) % chordNotes.length];
 
       const leadOsc = ctx.createOscillator();
@@ -263,10 +312,12 @@ export class AudioManager {
       }
       this.sourceNode = null;
     }
+
+    this.status = 'idle';
   }
 
   /**
-   * Update gain value.
+   * Update gain / smoothing settings.
    */
   public updateSettings(settings: AudioSettings) {
     if (this.analyser) {
@@ -277,7 +328,10 @@ export class AudioManager {
         this.timeDomainData = new Uint8Array(binCount);
       }
       if (typeof settings.smoothing === 'number') {
-        this.analyser.smoothingTimeConstant = Math.min(0.95, Math.max(0.1, settings.smoothing));
+        this.analyser.smoothingTimeConstant = Math.min(
+          0.95,
+          Math.max(0.1, settings.smoothing)
+        );
       }
     }
 
@@ -348,7 +402,7 @@ export class AudioManager {
     const rawBass = (bassCount > 0 ? bassSum / bassCount : 0) / 255;
     const rawMid = (midCount > 0 ? midSum / midCount : 0) / 255;
     const rawTreble = (trebleCount > 0 ? trebleSum / trebleCount : 0) / 255;
-    const rawOverall = (totalSum / binCount) / 255;
+    const rawOverall = totalSum / binCount / 255;
 
     // Apply sensitivity scaling
     const sens = settings.sensitivity || 1.0;
@@ -358,7 +412,7 @@ export class AudioManager {
     const scaledOverall = Math.min(1.0, rawOverall * sens);
 
     // Smooth exponentially to reduce jitter
-    const smoothFactor = 0.25; // balance responsiveness vs stability
+    const smoothFactor = 0.25;
     this.smoothedBass += (scaledBass - this.smoothedBass) * smoothFactor;
     this.smoothedMid += (scaledMid - this.smoothedMid) * smoothFactor;
     this.smoothedTreble += (scaledTreble - this.smoothedTreble) * smoothFactor;

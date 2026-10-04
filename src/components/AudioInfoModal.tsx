@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Mic, Info, Cpu, Radio, ShieldAlert, Sparkles } from 'lucide-react';
+import { X, Monitor, Info, Cpu, ShieldAlert, Sparkles, Volume2 } from 'lucide-react';
 
 interface AudioInfoModalProps {
   isOpen: boolean;
@@ -20,10 +20,10 @@ export const AudioInfoModal: React.FC<AudioInfoModalProps> = ({ isOpen, onClose 
             </div>
             <div>
               <h2 className="text-xl font-bold text-white tracking-wide">
-                Audio Input Architecture & Guide
+                Screen Audio Sharing Guide
               </h2>
               <p className="text-xs text-slate-400">
-                Understanding browser capture, virtual devices, and visualizer rendering
+                How system & tab audio capture works in Ambient Flip Visualizer
               </p>
             </div>
           </div>
@@ -35,60 +35,47 @@ export const AudioInfoModal: React.FC<AudioInfoModalProps> = ({ isOpen, onClose 
           </button>
         </div>
 
-        {/* Section 1: Audio Capture Mechanism */}
+        {/* Section 1: Screen Audio Capture */}
         <div className="space-y-2">
           <div className="flex items-center space-x-2 text-cyan-400 font-semibold text-sm">
-            <Mic className="w-4 h-4" />
-            <span>1. How Audio Capture Works</span>
+            <Monitor className="w-4 h-4" />
+            <span>1. How Screen Audio Capture Works</span>
           </div>
           <p className="text-sm text-slate-300 leading-relaxed pl-6">
-            The application utilizes the browser&apos;s native <code className="text-cyan-300 bg-slate-800 px-1 py-0.5 rounded">navigator.mediaDevices.getUserMedia()</code> API to open a high-fidelity input stream. This stream connects to a Web Audio API <code className="text-cyan-300 bg-slate-800 px-1 py-0.5 rounded">AudioContext</code>, running an <code className="text-cyan-300 bg-slate-800 px-1 py-0.5 rounded">AnalyserNode</code> that extracts realtime frequency spectrum (FFT) data without recording or sending audio anywhere.
+            The application requests screen sharing using <code className="text-cyan-300 bg-slate-800 px-1 py-0.5 rounded">navigator.mediaDevices.getDisplayMedia()</code>. When you select a tab, window, or screen and enable <strong>&quot;Share audio&quot;</strong>, the app extracts <strong>ONLY the audio track</strong> and immediately discards video frames.
           </p>
         </div>
 
-        {/* Section 2: Virtual Audio Devices */}
+        {/* Section 2: Video Discarding */}
         <div className="space-y-2">
           <div className="flex items-center space-x-2 text-purple-400 font-semibold text-sm">
-            <Radio className="w-4 h-4" />
-            <span>2. Using Virtual Audio Drivers (SteelSeries Sonar, Stereo Mix, VB-Cable)</span>
+            <Volume2 className="w-4 h-4" />
+            <span>2. Video Frames Are Never Rendered</span>
           </div>
           <p className="text-sm text-slate-300 leading-relaxed pl-6">
-            Virtual audio software creates software-based recording endpoints on your operating system. For example, software like <strong>SteelSeries Sonar</strong>, <strong>VB-Audio VoiceMeeter / Cable</strong>, or Windows <strong>Stereo Mix</strong> loop your system sound output back into a virtual input device that browsers like Chrome or Brave can directly capture.
+            No video streams are displayed, stored, or processed. Video tracks are stopped instantly upon capture to conserve 100% of CPU/GPU resources for the ambient visualizer.
           </p>
         </div>
 
-        {/* Section 3: Browser Security Limits */}
+        {/* Section 3: Audio Check Requirement */}
         <div className="space-y-2">
           <div className="flex items-center space-x-2 text-amber-400 font-semibold text-sm">
             <ShieldAlert className="w-4 h-4" />
-            <span>3. Why Arbitrary Speaker Endpoints Cannot Be Directly Intercepted</span>
+            <span>3. Enabling &quot;Share Audio&quot; in Browser Dialog</span>
           </div>
           <p className="text-sm text-slate-300 leading-relaxed pl-6">
-            For security and privacy, web browsers do not allow JavaScript to eavesdrop on raw system speaker output drivers without explicit hardware/virtual driver exposure. If a virtual audio cable is not configured, select your system microphone or enable the built-in <strong>Demo Synth Beat</strong> mode.
+            If a screen or tab is shared without checking the <strong>&quot;Share audio&quot;</strong> toggle in the browser prompt, the capture fails and prompts you to share again with audio enabled.
           </p>
         </div>
 
-        {/* Section 4: Visualizer Engine & Safety */}
+        {/* Section 4: Performance & Safety */}
         <div className="space-y-2">
           <div className="flex items-center space-x-2 text-pink-400 font-semibold text-sm">
             <Sparkles className="w-4 h-4" />
-            <span>4. Visualizer Engine & Measurement Accuracy</span>
+            <span>4. Visualizer Spectrum & Sensitivity</span>
           </div>
           <p className="text-sm text-slate-300 leading-relaxed pl-6">
-            The visualizer engine maps raw frequency bins to low-frequency Bass (20-250Hz), Midrange (250-4000Hz), and Treble (4000-20000Hz) energy values. 
-            <br />
-            <em className="text-slate-400 text-xs">Note: This tool is an ambient visual experience, not a calibrated acoustic dBFS or loudness meter. Amplitude heights represent relative graphic intensity.</em>
-          </p>
-        </div>
-
-        {/* Section 5: Performance Mode Optimization */}
-        <div className="space-y-2">
-          <div className="flex items-center space-x-2 text-emerald-400 font-semibold text-sm">
-            <Cpu className="w-4 h-4" />
-            <span>5. Low Performance Mode & FPS Throttling</span>
-          </div>
-          <p className="text-sm text-slate-300 leading-relaxed pl-6">
-            To prevent overheating on low-spec laptops, selecting <strong>Low Quality</strong> or <strong>30 FPS</strong> throttles requestAnimationFrame loops, lowers particle allocations, disables heavy blur/shadow filters, and simplifies FFT bin calculations.
+            The Web Audio API <code className="text-cyan-300 bg-slate-800 px-1 py-0.5 rounded">AnalyserNode</code> analyzes frequency spectrum bins in realtime. You can adjust master sensitivity and frequency band scales in the Audio settings tab.
           </p>
         </div>
 

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   AppSettings,
   AudioAnalysis,
-  AudioDeviceInfo,
   VisualizerPresetId,
 } from './types';
 import { Clock } from './components/Clock';
@@ -14,10 +13,7 @@ import { AudioManager } from './utils/audio-manager';
 import { getColorPalette, rgba } from './utils/color-palettes';
 import { renderVisualizer } from './visualizers/presets';
 import {
-  Sparkles,
-  Mic,
-  Maximize2,
-  Minimize2,
+  Monitor,
   Sliders,
   Play,
   Pause,
@@ -51,7 +47,6 @@ const DEFAULT_SETTINGS: AppSettings = {
     recentFonts: ['orbitron'],
   },
   audio: {
-    deviceId: '',
     gain: 1.0,
     sensitivity: 1.2,
     fftSize: 1024,
@@ -60,7 +55,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     midSens: 1.0,
     trebleSens: 1.0,
     isMuted: false,
-    mode: 'mic',
+    mode: 'screen_audio',
   },
   visualizer: {
     preset: 'galaxy',
@@ -134,7 +129,7 @@ export default function App() {
     return DEFAULT_SETTINGS;
   });
 
-  // UI Visibility States (Defaulting to true on load; H toggles on/off)
+  // UI Visibility States
   const [isUIVisible, setIsUIVisible] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isPaused, setIsPaused] = useState<boolean>(false);
@@ -142,13 +137,12 @@ export default function App() {
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
   const [isFontBrowserOpen, setIsFontBrowserOpen] = useState<boolean>(false);
 
-  // Audio Manager & Devices
+  // Audio Manager
   const audioManagerRef = useRef<AudioManager | null>(null);
-  const [audioDevices, setAudioDevices] = useState<AudioDeviceInfo[]>([]);
   const [audioStatus, setAudioStatus] = useState<
     'idle' | 'capturing' | 'silent' | 'denied' | 'unavailable'
   >('idle');
-  const [currentDeviceLabel, setCurrentDeviceLabel] = useState<string>('No Audio Device Selected');
+  const [currentDeviceLabel, setCurrentDeviceLabel] = useState<string>('Screen audio disconnected');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Canvas Refs & Loop Timers
@@ -169,13 +163,13 @@ export default function App() {
     const manager = new AudioManager();
     audioManagerRef.current = manager;
 
-    const fetchDevices = async () => {
-      const list = await manager.getAudioDevices();
-      setAudioDevices(list);
+    const syncStatus = () => {
+      setAudioStatus(manager.status);
+      setCurrentDeviceLabel(manager.currentDeviceLabel);
+      setErrorMessage(manager.errorMessage);
     };
 
-    fetchDevices();
-    manager.setOnDeviceChangeListener(fetchDevices);
+    manager.setOnStatusChangeListener(syncStatus);
 
     return () => {
       manager.destroy();
@@ -194,7 +188,7 @@ export default function App() {
 
   useEffect(() => {
     reinitAudio();
-  }, [settings.audio.deviceId, settings.audio.mode, reinitAudio]);
+  }, [settings.audio.mode, reinitAudio]);
 
   // Update Gain / Smoothing dynamically
   useEffect(() => {
@@ -203,10 +197,21 @@ export default function App() {
     }
   }, [settings.audio]);
 
-  const refreshAudioDevices = async () => {
+  const handleStartScreenAudio = async () => {
     if (audioManagerRef.current) {
-      const list = await audioManagerRef.current.getAudioDevices();
-      setAudioDevices(list);
+      await audioManagerRef.current.startScreenAudio(settings.audio);
+      setAudioStatus(audioManagerRef.current.status);
+      setCurrentDeviceLabel(audioManagerRef.current.currentDeviceLabel);
+      setErrorMessage(audioManagerRef.current.errorMessage);
+    }
+  };
+
+  const handleStopAudio = () => {
+    if (audioManagerRef.current) {
+      audioManagerRef.current.stop();
+      setAudioStatus(audioManagerRef.current.status);
+      setCurrentDeviceLabel(audioManagerRef.current.currentDeviceLabel);
+      setErrorMessage(audioManagerRef.current.errorMessage);
     }
   };
 
@@ -227,11 +232,13 @@ export default function App() {
     }
   };
 
-  // Right-Click Context Menu listener to toggle UI (when hidden, right click brings it back)
+  // Right-Click Context Menu listener to toggle UI
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => {
-      // Allow right-click menu inside text inputs/modals if needed, or toggle UI on background
-      if ((e.target as HTMLElement)?.closest('.settings-panel-container') || (e.target as HTMLElement)?.closest('input')) {
+      if (
+        (e.target as HTMLElement)?.closest('.settings-panel-container') ||
+        (e.target as HTMLElement)?.closest('input')
+      ) {
         return;
       }
       e.preventDefault();
@@ -244,7 +251,6 @@ export default function App() {
   // Keyboard Shortcuts Handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is typing inside an input or select element
       if (
         ['INPUT', 'SELECT', 'TEXTAREA'].includes(
           (e.target as HTMLElement)?.tagName
@@ -323,7 +329,12 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [settings.visualizer.preset, isFontBrowserOpen, isAudioInfoOpen, isShortcutsOpen]);
+  }, [
+    settings.visualizer.preset,
+    isFontBrowserOpen,
+    isAudioInfoOpen,
+    isShortcutsOpen,
+  ]);
 
   // Main Render Loop with FPS Throttling
   useEffect(() => {
@@ -384,7 +395,10 @@ export default function App() {
 
       // Audio-reactive background radial bloom
       if (settings.background.reactiveBrightness) {
-        const bgGlowRadius = Math.max(0, Math.max(canvas.width, canvas.height) * 0.8);
+        const bgGlowRadius = Math.max(
+          0,
+          Math.max(canvas.width, canvas.height) * 0.8
+        );
         const bgGrad = ctx.createRadialGradient(
           canvas.width / 2,
           canvas.height / 2,
@@ -393,7 +407,10 @@ export default function App() {
           canvas.height / 2,
           bgGlowRadius
         );
-        bgGrad.addColorStop(0, rgba(palette.primary, 0.2 + audioAnalysis.overallEnergy * 0.3));
+        bgGrad.addColorStop(
+          0,
+          rgba(palette.primary, 0.2 + audioAnalysis.overallEnergy * 0.3)
+        );
         bgGrad.addColorStop(1, 'transparent');
         ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -433,32 +450,40 @@ export default function App() {
       {/* Foreground Ambient Flip Clock */}
       <Clock settings={settings.clock} colorGlow={palette.accent} />
 
-      {/* Floating Audio Setup Bar when No Device / Mic Selected - ONLY WHEN UI IS VISIBLE */}
-      {isUIVisible && audioStatus !== 'capturing' && settings.audio.mode === 'mic' && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-30 flex items-center space-x-3 px-6 py-3 rounded-2xl bg-slate-900/90 backdrop-blur-md border border-cyan-500/40 text-cyan-300 shadow-2xl animate-bounce">
-          <Mic className="w-5 h-5 text-cyan-400 animate-pulse" />
-          <span className="text-xs font-semibold tracking-wide text-white">
-            Select an Audio Source to activate visualizer
-          </span>
-          <button
-            onClick={() => setIsUIVisible(true)}
-            className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg text-xs transition-colors shadow"
-          >
-            Select Device
-          </button>
-          <button
-            onClick={() =>
-              setSettings((prev) => ({
-                ...prev,
-                audio: { ...prev.audio, mode: 'demo_synth' },
-              }))
-            }
-            className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg text-xs transition-colors shadow"
-          >
-            Play Demo Synth
-          </button>
-        </div>
-      )}
+      {/* Floating Screen Audio Banner when disconnected - ONLY WHEN UI IS VISIBLE */}
+      {isUIVisible &&
+        audioStatus !== 'capturing' &&
+        settings.audio.mode === 'screen_audio' && (
+          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-30 flex items-center space-x-3 px-6 py-3.5 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-cyan-500/40 text-cyan-300 shadow-2xl animate-bounce">
+            <Monitor className="w-5 h-5 text-cyan-400 animate-pulse" />
+            <div className="flex flex-col text-left">
+              <span className="text-xs font-bold text-white">
+                {errorMessage ? 'Audio Not Shared' : 'Share Screen Audio'}
+              </span>
+              <span className="text-[11px] text-slate-300 max-w-xs truncate">
+                {errorMessage ||
+                  "Share a screen/tab and enable 'Share audio' in browser prompt."}
+              </span>
+            </div>
+            <button
+              onClick={handleStartScreenAudio}
+              className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs transition-colors shadow"
+            >
+              {errorMessage ? 'Share Again' : 'Share Screen Audio'}
+            </button>
+            <button
+              onClick={() =>
+                setSettings((prev) => ({
+                  ...prev,
+                  audio: { ...prev.audio, mode: 'demo_synth' },
+                }))
+              }
+              className="px-3 py-2 bg-purple-600/80 hover:bg-purple-500 text-white font-semibold rounded-xl text-xs transition-colors shadow"
+            >
+              Demo Synth
+            </button>
+          </div>
+        )}
 
       {/* Floating Bottom Minimal Controls Pill - VISIBLE ONLY WHEN isUIVisible IS TRUE */}
       {isUIVisible && (
@@ -484,7 +509,11 @@ export default function App() {
             className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
             title="Pause / Resume Visualizer (Space)"
           >
-            {isPaused ? <Play className="w-4 h-4 text-emerald-400" /> : <Pause className="w-4 h-4 text-amber-400" />}
+            {isPaused ? (
+              <Play className="w-4 h-4 text-emerald-400" />
+            ) : (
+              <Pause className="w-4 h-4 text-amber-400" />
+            )}
           </button>
 
           <button
@@ -498,7 +527,7 @@ export default function App() {
           <button
             onClick={() => setIsAudioInfoOpen(true)}
             className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
-            title="Audio Capture Guide"
+            title="Screen Audio Capture Guide"
           >
             <HelpCircle className="w-4 h-4" />
           </button>
@@ -516,11 +545,11 @@ export default function App() {
         settings={settings}
         updateSettings={setSettings}
         resetSettings={() => setSettings(DEFAULT_SETTINGS)}
-        audioDevices={audioDevices}
-        refreshAudioDevices={refreshAudioDevices}
         audioStatus={audioStatus}
         currentDeviceLabel={currentDeviceLabel}
         errorMessage={errorMessage}
+        onStartScreenAudio={handleStartScreenAudio}
+        onStopAudio={handleStopAudio}
         isFullscreen={isFullscreen}
         toggleFullscreen={toggleFullscreen}
         openAudioInfo={() => setIsAudioInfoOpen(true)}

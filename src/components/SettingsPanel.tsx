@@ -36,11 +36,11 @@ interface SettingsPanelProps {
   settings: AppSettings;
   updateSettings: (updater: (prev: AppSettings) => AppSettings) => void;
   resetSettings: () => void;
-  audioDevices: AudioDeviceInfo[];
-  refreshAudioDevices: () => void;
   audioStatus: 'idle' | 'capturing' | 'silent' | 'denied' | 'unavailable';
   currentDeviceLabel: string;
   errorMessage: string | null;
+  onStartScreenAudio: () => void;
+  onStopAudio: () => void;
   isFullscreen: boolean;
   toggleFullscreen: () => void;
   openAudioInfo: () => void;
@@ -77,11 +77,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   settings,
   updateSettings,
   resetSettings,
-  audioDevices,
-  refreshAudioDevices,
   audioStatus,
   currentDeviceLabel,
   errorMessage,
+  onStartScreenAudio,
+  onStopAudio,
   isFullscreen,
   toggleFullscreen,
   openAudioInfo,
@@ -363,14 +363,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-1">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                Input Source
+                Audio Input Source
               </h3>
               <button
                 onClick={openAudioInfo}
                 className="flex items-center space-x-1 text-cyan-400 hover:text-cyan-300 transition-colors text-[11px]"
               >
                 <HelpCircle className="w-3.5 h-3.5" />
-                <span>Audio Device Guide</span>
+                <span>Screen Audio Guide</span>
               </button>
             </div>
 
@@ -380,16 +380,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 onClick={() =>
                   updateSettings((prev) => ({
                     ...prev,
-                    audio: { ...prev.audio, mode: 'mic' },
+                    audio: { ...prev.audio, mode: 'screen_audio' },
                   }))
                 }
                 className={`py-1.5 rounded-lg font-semibold transition-all ${
-                  settings.audio.mode === 'mic'
+                  settings.audio.mode === 'screen_audio'
                     ? 'bg-cyan-600 text-white shadow'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Live Device / Mic
+                Screen Audio
               </button>
               <button
                 onClick={() =>
@@ -408,65 +408,57 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               </button>
             </div>
 
-            {/* Audio Device Dropdown */}
-            {settings.audio.mode === 'mic' && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-slate-300 font-medium">Select Capture Device</label>
-                  <button
-                    onClick={refreshAudioDevices}
-                    title="Refresh device list"
-                    className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+            {/* Screen Audio Controls */}
+            {settings.audio.mode === 'screen_audio' && (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-300 leading-relaxed bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                  Share a screen, window, or browser tab and enable <strong>&quot;Share audio&quot;</strong>. Only the shared audio is used by the visualizer.
+                </p>
 
-                <select
-                  value={settings.audio.deviceId}
-                  onChange={(e) =>
-                    updateSettings((prev) => ({
-                      ...prev,
-                      audio: { ...prev.audio, deviceId: e.target.value },
-                    }))
-                  }
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-slate-200 outline-none focus:border-cyan-500"
-                >
-                  <option value="">-- Choose Audio Source --</option>
-                  <option value="default">Default System Microphone</option>
-                  {audioDevices.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label}
-                    </option>
-                  ))}
-                </select>
-
-                {/* Status Indicator */}
-                <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Capture Status:</span>
-                    <span className="font-semibold flex items-center space-x-1.5">
-                      {audioStatus === 'capturing' && (
-                        <span className="text-emerald-400 flex items-center">
-                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping mr-1.5" />
-                          ● Capturing
-                        </span>
-                      )}
-                      {audioStatus === 'silent' && <span className="text-yellow-400">○ Low Audio Signal</span>}
-                      {audioStatus === 'denied' && <span className="text-red-400">⚠ Permission Denied</span>}
-                      {audioStatus === 'unavailable' && <span className="text-red-400">⚠ Device Unavailable</span>}
-                      {audioStatus === 'idle' && <span className="text-slate-400">○ Idle</span>}
-                    </span>
+                {/* Status and Action Buttons */}
+                {audioStatus === 'capturing' ? (
+                  <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/60 space-y-2">
+                    <div className="flex items-center justify-between text-emerald-400 font-semibold">
+                      <span className="flex items-center">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping mr-2" />
+                        Screen audio connected
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-300 truncate">
+                      Stream: <span className="text-white font-medium">{currentDeviceLabel}</span>
+                    </div>
+                    <button
+                      onClick={onStopAudio}
+                      className="w-full mt-1 py-2 bg-red-950/60 hover:bg-red-900/70 text-red-300 border border-red-800/60 font-semibold rounded-lg text-xs transition-all shadow"
+                    >
+                      Stop Audio
+                    </button>
                   </div>
-                  <div className="text-[11px] text-slate-400 truncate">
-                    Active: <span className="text-cyan-300">{currentDeviceLabel}</span>
-                  </div>
-                  {errorMessage && (
-                    <div className="text-[11px] text-red-400 bg-red-950/40 p-2 rounded-lg mt-1 border border-red-900/50">
+                ) : errorMessage ? (
+                  <div className="p-3 rounded-xl bg-red-950/40 border border-red-800/60 space-y-2">
+                    <div className="text-red-400 font-semibold">⚠ Audio not shared</div>
+                    <div className="text-[11px] text-red-300 leading-relaxed">
                       {errorMessage}
                     </div>
-                  )}
-                </div>
+                    <button
+                      onClick={onStartScreenAudio}
+                      className="w-full mt-1 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-lg text-xs transition-all shadow"
+                    >
+                      Share Again
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2 text-center">
+                    <div className="text-slate-400 text-xs">Screen audio disconnected</div>
+                    <button
+                      onClick={onStartScreenAudio}
+                      className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg flex items-center justify-center space-x-2"
+                    >
+                      <Mic className="w-4 h-4" />
+                      <span>Share Screen Audio</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

@@ -66,7 +66,6 @@ export interface ClockSettings {
 }
 
 export interface AudioSettings {
-  deviceId: string;
   gain: number; // 0.1 to 3.0
   sensitivity: number; // 0.5 to 3.0
   fftSize: number; // 256, 512, 1024, 2048, 4096
@@ -75,7 +74,7 @@ export interface AudioSettings {
   midSens: number; // 0.5 to 3.0
   trebleSens: number; // 0.5 to 3.0
   isMuted: boolean;
-  mode: 'mic' | 'demo_synth' | 'audio_file';
+  mode: 'screen_audio' | 'demo_synth';
   demoTrackName?: string;
 }
 

@@ -1,4 +1,4 @@
-import { AudioSettings, AudioAnalysis } from '../types';
+import { AudioSettings, AudioAnalysis, AudioDeviceInfo } from '../types';
 
 export class AudioManager {
   private audioContext: AudioContext | null = null;
@@ -22,7 +22,7 @@ export class AudioManager {
 
   // Status
   public status: 'idle' | 'capturing' | 'silent' | 'denied' | 'unavailable' = 'idle';
-  public currentDeviceLabel = 'Screen audio disconnected';
+  public currentDeviceLabel = 'Audio disconnected';
   public errorMessage: string | null = null;
 
   private onStatusChangeCallback?: () => void;
@@ -34,6 +34,32 @@ export class AudioManager {
   private notifyStatusChange() {
     if (this.onStatusChangeCallback) {
       this.onStatusChangeCallback();
+    }
+  }
+
+  /**
+   * Enumerate available microphone devices (ideal for Mobile & Desktop)
+   */
+  public async getAudioDevices(): Promise<AudioDeviceInfo[]> {
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices ||
+      !navigator.mediaDevices.enumerateDevices
+    ) {
+      return [];
+    }
+
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter((d) => d.kind === 'audioinput');
+
+      return audioInputs.map((d, index) => ({
+        deviceId: d.deviceId,
+        label: d.label || `Microphone ${index + 1}`,
+      }));
+    } catch (err) {
+      console.warn('Error enumerating audio devices:', err);
+      return [];
     }
   }
 
@@ -57,6 +83,76 @@ export class AudioManager {
   }
 
   /**
+   * Start microphone input capture via getUserMedia (Great for Mobile Web & Desktop Room Mic)
+   */
+  public async startMicAudio(settings: AudioSettings): Promise<boolean> {
+    try {
+      const ctx = await this.ensureContext();
+      this.stop();
+
+      this.analyser = ctx.createAnalyser();
+      this.analyser.fftSize = settings.fftSize || 1024;
+      this.analyser.smoothingTimeConstant = Math.min(
+        0.95,
+        Math.max(0.1, settings.smoothing)
+      );
+
+      this.gainNode = ctx.createGain();
+      this.gainNode.gain.value = settings.isMuted ? 0 : settings.gain;
+
+      const binCount = this.analyser.frequencyBinCount;
+      this.frequencyData = new Uint8Array(binCount);
+      this.timeDomainData = new Uint8Array(binCount);
+
+      const constraints: MediaStreamConstraints = {
+        audio: settings.deviceId && settings.deviceId !== 'default'
+          ? { deviceId: { exact: settings.deviceId } }
+          : true,
+      };
+
+      try {
+        this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        const track = this.mediaStream.getAudioTracks()[0];
+        if (track) {
+          this.currentDeviceLabel = track.label || 'Microphone Connected';
+          track.onended = () => {
+            this.stop();
+            this.notifyStatusChange();
+          };
+        }
+
+        const source = ctx.createMediaStreamSource(this.mediaStream);
+        this.sourceNode = source;
+
+        source.connect(this.gainNode);
+        this.gainNode.connect(this.analyser);
+
+        this.status = 'capturing';
+        this.errorMessage = null;
+        this.notifyStatusChange();
+        return true;
+      } catch (err: unknown) {
+        const error = err as Error;
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+          this.status = 'denied';
+          this.errorMessage = 'Microphone permission was denied by browser or user.';
+        } else {
+          this.status = 'unavailable';
+          this.errorMessage = `Microphone capture failed: ${error.message}`;
+        }
+        this.notifyStatusChange();
+        return false;
+      }
+    } catch (err: unknown) {
+      const error = err as Error;
+      this.status = 'unavailable';
+      this.errorMessage = `Audio setup error: ${error.message}`;
+      this.notifyStatusChange();
+      return false;
+    }
+  }
+
+  /**
    * Start screen capture audio using getDisplayMedia and extracting ONLY the audio track.
    */
   public async startScreenAudio(settings: AudioSettings): Promise<boolean> {
@@ -64,7 +160,6 @@ export class AudioManager {
       const ctx = await this.ensureContext();
       this.stop();
 
-      // Create AnalyserNode & GainNode
       this.analyser = ctx.createAnalyser();
       this.analyser.fftSize = settings.fftSize || 1024;
       this.analyser.smoothingTimeConstant = Math.min(
@@ -86,7 +181,7 @@ export class AudioManager {
       ) {
         this.status = 'unavailable';
         this.errorMessage =
-          'Screen audio capture (getDisplayMedia) is not supported in this browser.';
+          'Screen audio capture is not supported on this mobile browser. Please switch to Microphone mode below!';
         this.notifyStatusChange();
         return false;
       }
@@ -122,9 +217,7 @@ export class AudioManager {
       // STOP ALL VIDEO TRACKS IMMEDIATELY - We ONLY want audio
       rawStream.getVideoTracks().forEach((vt) => vt.stop());
 
-      // CRITICAL REQUIREMENT: Check if audio track exists
       if (audioTracks.length === 0) {
-        // Stop any remaining tracks
         rawStream.getTracks().forEach((t) => t.stop());
 
         this.status = 'unavailable';
@@ -137,7 +230,6 @@ export class AudioManager {
 
       const audioTrack = audioTracks[0];
 
-      // Handle user clicking the browser "Stop sharing" bar
       audioTrack.onended = () => {
         this.stop();
         this.status = 'idle';
@@ -199,6 +291,14 @@ export class AudioManager {
       return true;
     }
 
+    if (settings.mode === 'mic') {
+      if (this.status === 'capturing' && this.mediaStream) {
+        this.updateSettings(settings);
+        return true;
+      }
+      return await this.startMicAudio(settings);
+    }
+
     if (settings.mode === 'screen_audio') {
       if (
         this.status === 'capturing' &&
@@ -237,7 +337,7 @@ export class AudioManager {
 
       const now = ctx.currentTime;
 
-      // Kick drum on 0, 4, 8, 12
+      // Kick drum
       if (step % 4 === 0) {
         const kickOsc = ctx.createOscillator();
         const kickGain = ctx.createGain();
@@ -252,7 +352,7 @@ export class AudioManager {
         kickOsc.stop(now + 0.2);
       }
 
-      // Snare / clap on 4, 12
+      // Snare / clap
       if (step % 8 === 4) {
         const snareOsc = ctx.createOscillator();
         const snareGain = ctx.createGain();
@@ -267,7 +367,7 @@ export class AudioManager {
         snareOsc.stop(now + 0.16);
       }
 
-      // Synth chord notes
+      // Synth chords
       const chordNotes = [220, 261.63, 329.63, 392.0, 440, 523.25];
       const chordFreq = chordNotes[(step * 2) % chordNotes.length];
 

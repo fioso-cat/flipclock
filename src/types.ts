@@ -1,4 +1,15 @@
 export type VisualizerPresetId =
+  | 'synthwave'
+  | 'mars'
+  | 'solar_system'
+  | 'jupiter'
+  | 'saturn'
+  | 'neptune'
+  | 'supernova'
+  | 'eclipse'
+  | 'blackhole'
+  | 'pulsar'
+  | 'exoplanet'
   | 'ocean'
   | 'sunshine'
   | 'galaxy'
@@ -66,6 +77,7 @@ export interface ClockSettings {
 }
 
 export interface AudioSettings {
+  deviceId?: string;
   gain: number; // 0.1 to 3.0
   sensitivity: number; // 0.5 to 3.0
   fftSize: number; // 256, 512, 1024, 2048, 4096
@@ -74,7 +86,7 @@ export interface AudioSettings {
   midSens: number; // 0.5 to 3.0
   trebleSens: number; // 0.5 to 3.0
   isMuted: boolean;
-  mode: 'screen_audio' | 'demo_synth';
+  mode: 'screen_audio' | 'mic' | 'demo_synth';
   demoTrackName?: string;
 }
 

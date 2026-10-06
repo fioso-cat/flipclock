@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   AppSettings,
   AudioAnalysis,
+  AudioDeviceInfo,
   VisualizerPresetId,
 } from './types';
 import { Clock } from './components/Clock';
@@ -14,6 +15,7 @@ import { getColorPalette, rgba } from './utils/color-palettes';
 import { renderVisualizer } from './visualizers/presets';
 import {
   Monitor,
+  Mic,
   Sliders,
   Play,
   Pause,
@@ -47,6 +49,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     recentFonts: ['orbitron'],
   },
   audio: {
+    deviceId: 'default',
     gain: 1.0,
     sensitivity: 1.2,
     fftSize: 1024,
@@ -58,7 +61,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     mode: 'screen_audio',
   },
   visualizer: {
-    preset: 'galaxy',
+    preset: 'jupiter',
     position: 'center',
     scale: 1.0,
     speed: 1.0,
@@ -93,6 +96,17 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 const PRESETS_ARRAY: VisualizerPresetId[] = [
+  'synthwave',
+  'solar_system',
+  'mars',
+  'jupiter',
+  'saturn',
+  'neptune',
+  'supernova',
+  'eclipse',
+  'blackhole',
+  'pulsar',
+  'exoplanet',
   'galaxy',
   'ocean',
   'sunshine',
@@ -139,10 +153,11 @@ export default function App() {
 
   // Audio Manager
   const audioManagerRef = useRef<AudioManager | null>(null);
+  const [audioDevices, setAudioDevices] = useState<AudioDeviceInfo[]>([]);
   const [audioStatus, setAudioStatus] = useState<
     'idle' | 'capturing' | 'silent' | 'denied' | 'unavailable'
   >('idle');
-  const [currentDeviceLabel, setCurrentDeviceLabel] = useState<string>('Screen audio disconnected');
+  const [currentDeviceLabel, setCurrentDeviceLabel] = useState<string>('Audio disconnected');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Canvas Refs & Loop Timers
@@ -163,6 +178,13 @@ export default function App() {
     const manager = new AudioManager();
     audioManagerRef.current = manager;
 
+    const fetchDevices = async () => {
+      const list = await manager.getAudioDevices();
+      setAudioDevices(list);
+    };
+
+    fetchDevices();
+
     const syncStatus = () => {
       setAudioStatus(manager.status);
       setCurrentDeviceLabel(manager.currentDeviceLabel);
@@ -175,6 +197,13 @@ export default function App() {
       manager.destroy();
     };
   }, []);
+
+  const refreshAudioDevices = async () => {
+    if (audioManagerRef.current) {
+      const list = await audioManagerRef.current.getAudioDevices();
+      setAudioDevices(list);
+    }
+  };
 
   // Update Audio Stream when audio settings change
   const reinitAudio = useCallback(async () => {
@@ -200,6 +229,15 @@ export default function App() {
   const handleStartScreenAudio = async () => {
     if (audioManagerRef.current) {
       await audioManagerRef.current.startScreenAudio(settings.audio);
+      setAudioStatus(audioManagerRef.current.status);
+      setCurrentDeviceLabel(audioManagerRef.current.currentDeviceLabel);
+      setErrorMessage(audioManagerRef.current.errorMessage);
+    }
+  };
+
+  const handleStartMicAudio = async () => {
+    if (audioManagerRef.current) {
+      await audioManagerRef.current.startMicAudio(settings.audio);
       setAudioStatus(audioManagerRef.current.status);
       setCurrentDeviceLabel(audioManagerRef.current.currentDeviceLabel);
       setErrorMessage(audioManagerRef.current.errorMessage);
@@ -316,14 +354,6 @@ export default function App() {
             intensity: Math.max(0.5, prev.visualizer.intensity - 0.2),
           },
         }));
-      } else if (['1', '2', '3', '4', '5', '6', '7', '8', '9'].includes(e.key)) {
-        const idx = parseInt(e.key, 10) - 1;
-        if (idx < PRESETS_ARRAY.length) {
-          setSettings((prev) => ({
-            ...prev,
-            visualizer: { ...prev.visualizer, preset: PRESETS_ARRAY[idx] },
-          }));
-        }
       }
     };
 
@@ -450,40 +480,43 @@ export default function App() {
       {/* Foreground Ambient Flip Clock */}
       <Clock settings={settings.clock} colorGlow={palette.accent} />
 
-      {/* Floating Screen Audio Banner when disconnected - ONLY WHEN UI IS VISIBLE */}
-      {isUIVisible &&
-        audioStatus !== 'capturing' &&
-        settings.audio.mode === 'screen_audio' && (
-          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-30 flex items-center space-x-3 px-6 py-3.5 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-cyan-500/40 text-cyan-300 shadow-2xl animate-bounce">
-            <Monitor className="w-5 h-5 text-cyan-400 animate-pulse" />
-            <div className="flex flex-col text-left">
-              <span className="text-xs font-bold text-white">
-                {errorMessage ? 'Audio Not Shared' : 'Share Screen Audio'}
-              </span>
-              <span className="text-[11px] text-slate-300 max-w-xs truncate">
-                {errorMessage ||
-                  "Share a screen/tab and enable 'Share audio' in browser prompt."}
-              </span>
-            </div>
-            <button
-              onClick={handleStartScreenAudio}
-              className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs transition-colors shadow"
-            >
-              {errorMessage ? 'Share Again' : 'Share Screen Audio'}
-            </button>
-            <button
-              onClick={() =>
-                setSettings((prev) => ({
-                  ...prev,
-                  audio: { ...prev.audio, mode: 'demo_synth' },
-                }))
-              }
-              className="px-3 py-2 bg-purple-600/80 hover:bg-purple-500 text-white font-semibold rounded-xl text-xs transition-colors shadow"
-            >
-              Demo Synth
-            </button>
+      {/* Floating Audio Setup Banner when disconnected - ONLY WHEN UI IS VISIBLE */}
+      {isUIVisible && audioStatus !== 'capturing' && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-30 flex flex-wrap items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-cyan-500/40 text-cyan-300 shadow-2xl animate-bounce max-w-[92vw]">
+          <div className="flex items-center space-x-2">
+            <Monitor className="w-4 h-4 text-cyan-400" />
+            <span className="text-xs font-bold text-white">Select Audio Source:</span>
           </div>
-        )}
+
+          <button
+            onClick={handleStartScreenAudio}
+            className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs transition-colors shadow flex items-center space-x-1"
+          >
+            <Monitor className="w-3.5 h-3.5" />
+            <span>Screen Audio</span>
+          </button>
+
+          <button
+            onClick={handleStartMicAudio}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-colors shadow flex items-center space-x-1"
+          >
+            <Mic className="w-3.5 h-3.5" />
+            <span>Microphone (Mobile & PC)</span>
+          </button>
+
+          <button
+            onClick={() =>
+              setSettings((prev) => ({
+                ...prev,
+                audio: { ...prev.audio, mode: 'demo_synth' },
+              }))
+            }
+            className="px-3 py-1.5 bg-purple-600/80 hover:bg-purple-500 text-white font-semibold rounded-xl text-xs transition-colors shadow"
+          >
+            Demo Synth
+          </button>
+        </div>
+      )}
 
       {/* Floating Bottom Minimal Controls Pill - VISIBLE ONLY WHEN isUIVisible IS TRUE */}
       {isUIVisible && (
@@ -527,7 +560,7 @@ export default function App() {
           <button
             onClick={() => setIsAudioInfoOpen(true)}
             className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
-            title="Screen Audio Capture Guide"
+            title="Audio Capture Guide"
           >
             <HelpCircle className="w-4 h-4" />
           </button>
@@ -548,7 +581,10 @@ export default function App() {
         audioStatus={audioStatus}
         currentDeviceLabel={currentDeviceLabel}
         errorMessage={errorMessage}
+        audioDevices={audioDevices}
+        refreshAudioDevices={refreshAudioDevices}
         onStartScreenAudio={handleStartScreenAudio}
+        onStartMicAudio={handleStartMicAudio}
         onStopAudio={handleStopAudio}
         isFullscreen={isFullscreen}
         toggleFullscreen={toggleFullscreen}

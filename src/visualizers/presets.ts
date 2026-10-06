@@ -935,12 +935,666 @@ function renderMinimal(ctx: RenderContext) {
 }
 
 // ----------------------------------------------------
+// PLANET 1: JUPITER (Gas Giant & Red Spot Storm)
+// ----------------------------------------------------
+function renderJupiter(ctx: RenderContext) {
+  const { ctx: c, time, audio, palette, vSettings } = ctx;
+  const { cx, cy } = getCenterCoords(ctx);
+  const planetRadius = 140 * vSettings.scale;
+
+  c.save();
+  c.translate(cx, cy);
+
+  // Planet Atmosphere Glow
+  const atmosGrad = safeRadialGradient(c, 0, 0, planetRadius * 0.8, 0, 0, planetRadius * 1.3);
+  atmosGrad.addColorStop(0, rgba(palette.accent, 0.4));
+  atmosGrad.addColorStop(1, 'transparent');
+  c.fillStyle = atmosGrad;
+  c.beginPath();
+  safeArc(c, 0, 0, planetRadius * 1.3);
+  c.fill();
+
+  // Clip to Planet Sphere
+  c.beginPath();
+  safeArc(c, 0, 0, planetRadius);
+  c.clip();
+
+  // Base Gas Gradient
+  const baseGrad = c.createLinearGradient(0, -planetRadius, 0, planetRadius);
+  baseGrad.addColorStop(0, palette.gradientStops[0] || '#2b1b17');
+  baseGrad.addColorStop(0.5, palette.gradientStops[1] || '#c87d55');
+  baseGrad.addColorStop(1, palette.gradientStops[2] || '#4a2c20');
+  c.fillStyle = baseGrad;
+  c.fillRect(-planetRadius, -planetRadius, planetRadius * 2, planetRadius * 2);
+
+  // Swirling Gas Bands
+  const bandCount = 12;
+  const bandHeight = (planetRadius * 2) / bandCount;
+  for (let i = 0; i < bandCount; i++) {
+    const y = -planetRadius + i * bandHeight;
+    const isLightBand = i % 2 === 0;
+    c.fillStyle = isLightBand ? rgba('#ffe3cd', 0.25) : rgba('#8d4f38', 0.35);
+
+    c.beginPath();
+    c.moveTo(-planetRadius, y);
+    for (let x = -planetRadius; x <= planetRadius; x += 10) {
+      const wave = Math.sin(x * 0.03 + time * 1.2 + i) * (6 + audio.bass * 15 * vSettings.intensity);
+      c.lineTo(x, y + wave);
+    }
+    c.lineTo(planetRadius, y + bandHeight);
+    c.lineTo(-planetRadius, y + bandHeight);
+    c.closePath();
+    c.fill();
+  }
+
+  // Great Red Spot Vortex
+  const spotX = Math.cos(time * 0.3) * (planetRadius * 0.3);
+  const spotY = planetRadius * 0.35;
+  const spotRadius = (35 + audio.bass * 20 * vSettings.intensity) * vSettings.scale;
+
+  const spotGrad = safeRadialGradient(c, spotX, spotY, 5, spotX, spotY, spotRadius);
+  spotGrad.addColorStop(0, '#e63946');
+  spotGrad.addColorStop(0.6, '#9b2226');
+  spotGrad.addColorStop(1, 'transparent');
+  c.fillStyle = spotGrad;
+  c.beginPath();
+  safeArc(c, spotX, spotY, spotRadius);
+  c.fill();
+
+  // Auroral Polar Lights
+  c.strokeStyle = rgba(palette.accent, 0.6 + audio.treble * 0.4);
+  c.lineWidth = 4;
+  c.beginPath();
+  safeArc(c, 0, -planetRadius * 0.85, planetRadius * 0.3);
+  c.stroke();
+
+  c.restore();
+}
+
+// ----------------------------------------------------
+// PLANET 2: SATURN (Golden Ringed World)
+// ----------------------------------------------------
+function renderSaturn(ctx: RenderContext) {
+  const { ctx: c, time, audio, palette, vSettings } = ctx;
+  const { cx, cy } = getCenterCoords(ctx);
+  const planetRadius = 85 * vSettings.scale;
+
+  c.save();
+  c.translate(cx, cy);
+
+  // Saturn Planet Body
+  const planetGrad = safeRadialGradient(c, -20, -20, 10, 0, 0, planetRadius);
+  planetGrad.addColorStop(0, '#fefae0');
+  planetGrad.addColorStop(0.5, '#dda15e');
+  planetGrad.addColorStop(1, '#bc6c25');
+  c.fillStyle = planetGrad;
+  c.beginPath();
+  safeArc(c, 0, 0, planetRadius);
+  c.fill();
+
+  // Tilted 3D Concentric Ring System
+  const ringAngles = 0.35;
+  c.rotate(ringAngles);
+
+  const ringCount = 8;
+  for (let r = 0; r < ringCount; r++) {
+    const rx = (planetRadius * 1.5 + r * 14 * vSettings.scale) * (1 + audio.mid * 0.15);
+    const ry = rx * 0.3;
+    const color = palette.gradientStops[r % palette.gradientStops.length] || palette.accent;
+
+    c.strokeStyle = rgba(color, 0.5 + (r / ringCount) * 0.4);
+    c.lineWidth = 3 + (r % 3);
+
+    c.beginPath();
+    c.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    c.stroke();
+  }
+
+  // Ring Particles Dancing
+  const count = 30;
+  for (let p = 0; p < count; p++) {
+    const pAngle = time * 0.8 + (p * Math.PI * 2) / count;
+    const pDist = planetRadius * 1.8 + (p % 5) * 12;
+    const px = Math.cos(pAngle) * pDist;
+    const py = Math.sin(pAngle) * pDist * 0.3;
+
+    c.fillStyle = palette.accent;
+    c.beginPath();
+    safeArc(c, px, py, 2.5 * (1 + audio.treble * 1.5));
+    c.fill();
+  }
+
+  c.restore();
+}
+
+// ----------------------------------------------------
+// PLANET 3: NEPTUNE (Supersonic Ice Giant)
+// ----------------------------------------------------
+function renderNeptune(ctx: RenderContext) {
+  const { ctx: c, time, audio, palette, vSettings } = ctx;
+  const { cx, cy } = getCenterCoords(ctx);
+  const planetRadius = 120 * vSettings.scale;
+
+  c.save();
+  c.translate(cx, cy);
+
+  // Outer Supersonic Shockwaves
+  const waveCount = 3;
+  for (let w = 0; w < waveCount; w++) {
+    const shockR = (planetRadius + (time * 60 + w * 70) % 180) * (1 + audio.bass * 0.4);
+    c.strokeStyle = rgba('#00b4d8', Math.max(0, 1 - shockR / 300));
+    c.lineWidth = 2;
+    c.beginPath();
+    safeArc(c, 0, 0, shockR);
+    c.stroke();
+  }
+
+  // Planet Globe
+  const neptuneGrad = safeRadialGradient(c, -30, -30, 10, 0, 0, planetRadius);
+  neptuneGrad.addColorStop(0, '#90e0ef');
+  neptuneGrad.addColorStop(0.4, '#0077b6');
+  neptuneGrad.addColorStop(1, '#03045e');
+  c.fillStyle = neptuneGrad;
+  c.beginPath();
+  safeArc(c, 0, 0, planetRadius);
+  c.fill();
+
+  // Swirling Methane Cloud Wisps
+  c.strokeStyle = rgba('#ffffff', 0.6 + audio.mid * 0.4);
+  c.lineWidth = 3;
+  for (let m = 0; m < 5; m++) {
+    c.beginPath();
+    const my = -planetRadius * 0.6 + m * 40;
+    c.moveTo(-planetRadius * 0.8, my);
+    for (let x = -planetRadius * 0.8; x <= planetRadius * 0.8; x += 15) {
+      const wisp = Math.cos(x * 0.04 + time * 3 + m) * 12 * audio.mid;
+      c.lineTo(x, my + wisp);
+    }
+    c.stroke();
+  }
+
+  c.restore();
+}
+
+// ----------------------------------------------------
+// PLANET 4: SUPERNOVA (Cosmic Star Explosion)
+// ----------------------------------------------------
+function renderSupernova(ctx: RenderContext) {
+  const { ctx: c, time, audio, palette, vSettings, pSettings } = ctx;
+  const { cx, cy } = getCenterCoords(ctx);
+  const coreRadius = (40 + audio.bass * 80 * vSettings.intensity) * vSettings.scale;
+
+  c.save();
+  c.translate(cx, cy);
+
+  // Exploding Core
+  const coreGrad = safeRadialGradient(c, 0, 0, 0, 0, 0, coreRadius * 2);
+  coreGrad.addColorStop(0, '#ffffff');
+  coreGrad.addColorStop(0.3, palette.accent);
+  coreGrad.addColorStop(0.7, palette.primary);
+  coreGrad.addColorStop(1, 'transparent');
+  c.fillStyle = coreGrad;
+  c.beginPath();
+  safeArc(c, 0, 0, coreRadius * 2);
+  c.fill();
+
+  // Expanding Shockwave Rings
+  const ringCount = 4;
+  for (let r = 0; r < ringCount; r++) {
+    const ringR = ((time * 120 * vSettings.speed + r * 100) % 400) * (1 + audio.bass * 0.5);
+    c.strokeStyle = rgba(palette.gradientStops[r % palette.gradientStops.length], 1 - ringR / 400);
+    c.lineWidth = 4;
+    c.beginPath();
+    safeArc(c, 0, 0, ringR);
+    c.stroke();
+  }
+
+  // Radial Ray Ejecta
+  const rays = pSettings.quality === 'low' ? 24 : 48;
+  for (let i = 0; i < rays; i++) {
+    const angle = (i / rays) * Math.PI * 2;
+    const freqVal = audio.rawFrequencyData[i * 2] / 255 || 0;
+    const rayLen = coreRadius + freqVal * 180 * vSettings.intensity;
+
+    c.strokeStyle = rgba(palette.gradientStops[i % palette.gradientStops.length], 0.7);
+    c.lineWidth = 2;
+    c.beginPath();
+    c.moveTo(Math.cos(angle) * coreRadius, Math.sin(angle) * coreRadius);
+    c.lineTo(Math.cos(angle) * rayLen, Math.sin(angle) * rayLen);
+    c.stroke();
+  }
+
+  c.restore();
+}
+
+// ----------------------------------------------------
+// PLANET 5: SOLAR ECLIPSE (Blinding Corona)
+// ----------------------------------------------------
+function renderEclipse(ctx: RenderContext) {
+  const { ctx: c, time, audio, palette, vSettings, pSettings } = ctx;
+  const { cx, cy } = getCenterCoords(ctx);
+  const moonRadius = 110 * vSettings.scale;
+
+  c.save();
+  c.translate(cx, cy);
+
+  // Solar Corona Radiance
+  const coronaR = moonRadius * (1.2 + audio.bass * 0.8 * vSettings.intensity);
+  const coronaGrad = safeRadialGradient(c, 0, 0, moonRadius * 0.9, 0, 0, coronaR);
+  coronaGrad.addColorStop(0, '#ffffff');
+  coronaGrad.addColorStop(0.3, palette.accent);
+  coronaGrad.addColorStop(0.7, palette.primary);
+  coronaGrad.addColorStop(1, 'transparent');
+  c.fillStyle = coronaGrad;
+  c.beginPath();
+  safeArc(c, 0, 0, coronaR);
+  c.fill();
+
+  // Solar Prominences Arching Out
+  const prominenceCount = pSettings.quality === 'low' ? 16 : 36;
+  for (let i = 0; i < prominenceCount; i++) {
+    const angle = (i / prominenceCount) * Math.PI * 2 + time * 0.1;
+    const freqVal = audio.rawFrequencyData[i * 2] / 255 || 0;
+    const flareLen = moonRadius + freqVal * 120 * vSettings.intensity;
+
+    c.strokeStyle = rgba('#ffb703', 0.8);
+    c.lineWidth = 3;
+    c.beginPath();
+    c.moveTo(Math.cos(angle) * moonRadius, Math.sin(angle) * moonRadius);
+    c.lineTo(Math.cos(angle) * flareLen, Math.sin(angle) * flareLen);
+    c.stroke();
+  }
+
+  // Dark Moon Silhouette
+  c.fillStyle = '#050508';
+  c.beginPath();
+  safeArc(c, 0, 0, moonRadius);
+  c.fill();
+
+  c.restore();
+}
+
+// ----------------------------------------------------
+// PLANET 6: BLACK HOLE (Event Horizon & Accretion Disk)
+// ----------------------------------------------------
+function renderBlackHole(ctx: RenderContext) {
+  const { ctx: c, time, audio, palette, vSettings } = ctx;
+  const { cx, cy } = getCenterCoords(ctx);
+  const holeRadius = 80 * vSettings.scale;
+
+  c.save();
+  c.translate(cx, cy);
+
+  // Swirling Accretion Disk
+  c.rotate(time * 0.5 * vSettings.speed);
+  const diskR = holeRadius * (1.8 + audio.bass * 0.6 * vSettings.intensity);
+  const diskGrad = safeRadialGradient(c, 0, 0, holeRadius, 0, 0, diskR);
+  diskGrad.addColorStop(0, palette.accent);
+  diskGrad.addColorStop(0.5, palette.secondary);
+  diskGrad.addColorStop(1, 'transparent');
+  c.fillStyle = diskGrad;
+  c.beginPath();
+  c.ellipse(0, 0, diskR, diskR * 0.35, 0, 0, Math.PI * 2);
+  c.fill();
+
+  // Gravitational Einstein Ring
+  c.strokeStyle = rgba('#ffffff', 0.8 + audio.treble * 0.2);
+  c.lineWidth = 3;
+  c.beginPath();
+  safeArc(c, 0, 0, holeRadius * 1.15);
+  c.stroke();
+
+  // Pitch Black Event Horizon
+  c.fillStyle = '#000000';
+  c.beginPath();
+  safeArc(c, 0, 0, holeRadius);
+  c.fill();
+
+  c.restore();
+}
+
+// ----------------------------------------------------
+// PLANET 7: PULSAR (Spinning Gamma Beams)
+// ----------------------------------------------------
+function renderPulsar(ctx: RenderContext) {
+  const { ctx: c, time, audio, palette, vSettings } = ctx;
+  const { cx, cy } = getCenterCoords(ctx);
+  const starRadius = (35 + audio.bass * 30 * vSettings.intensity) * vSettings.scale;
+
+  c.save();
+  c.translate(cx, cy);
+
+  // Dual Gamma Radiation Beams
+  const spinAngle = time * 3.5 * vSettings.speed;
+  c.rotate(spinAngle);
+
+  const beamLength = 450 * vSettings.scale;
+  const beamWidth = (15 + audio.treble * 35) * vSettings.intensity;
+
+  c.fillStyle = rgba(palette.accent, 0.7);
+  c.beginPath();
+  c.moveTo(-beamWidth / 2, 0);
+  c.lineTo(-beamWidth * 2, -beamLength);
+  c.lineTo(beamWidth * 2, -beamLength);
+  c.lineTo(beamWidth / 2, 0);
+  c.fill();
+
+  c.beginPath();
+  c.moveTo(-beamWidth / 2, 0);
+  c.lineTo(-beamWidth * 2, beamLength);
+  c.lineTo(beamWidth * 2, beamLength);
+  c.lineTo(beamWidth / 2, 0);
+  c.fill();
+
+  // Pulsar Star Core
+  c.fillStyle = '#ffffff';
+  c.beginPath();
+  safeArc(c, 0, 0, starRadius);
+  c.fill();
+
+  c.restore();
+}
+
+// ----------------------------------------------------
+// PLANET 8: EXOPLANET (Bioluminescent Alien World)
+// ----------------------------------------------------
+function renderExoplanet(ctx: RenderContext) {
+  const { ctx: c, time, audio, palette, vSettings } = ctx;
+  const { cx, cy } = getCenterCoords(ctx);
+  const planetRadius = 115 * vSettings.scale;
+
+  c.save();
+  c.translate(cx, cy);
+
+  // Atmospheric Rim Glow
+  const rimGrad = safeRadialGradient(c, 0, 0, planetRadius * 0.9, 0, 0, planetRadius * 1.25);
+  rimGrad.addColorStop(0, rgba('#00f5d4', 0.5 + audio.bass * 0.4));
+  rimGrad.addColorStop(1, 'transparent');
+  c.fillStyle = rimGrad;
+  c.beginPath();
+  safeArc(c, 0, 0, planetRadius * 1.25);
+  c.fill();
+
+  // Alien Planet Body
+  const exoGrad = safeRadialGradient(c, -30, -30, 10, 0, 0, planetRadius);
+  exoGrad.addColorStop(0, '#7b2cbf');
+  exoGrad.addColorStop(0.6, '#3a0ca3');
+  exoGrad.addColorStop(1, '#03071e');
+  c.fillStyle = exoGrad;
+  c.beginPath();
+  safeArc(c, 0, 0, planetRadius);
+  c.fill();
+
+  // Bioluminescent Continent Contours
+  c.strokeStyle = rgba('#70e000', 0.7 + audio.mid * 0.3);
+  c.lineWidth = 2.5;
+  for (let b = 0; b < 4; b++) {
+    const angle = b * 1.5 + time * 0.2;
+    const bx = Math.cos(angle) * (planetRadius * 0.4);
+    const by = Math.sin(angle) * (planetRadius * 0.4);
+    c.beginPath();
+    safeArc(c, bx, by, 25 * (1 + audio.mid * 0.8));
+    c.stroke();
+  }
+
+  c.restore();
+}
+
+// ----------------------------------------------------
+// SYNTHWAVE PRESET
+// ----------------------------------------------------
+function renderSynthwave(ctx: RenderContext) {
+  const { ctx: c, width, height, time, audio, palette, vSettings, pSettings } = ctx;
+  const { cx, cy } = getCenterCoords(ctx);
+  const horizonY = cy + height * 0.05;
+  const sunRadius = Math.min(width, height) * 0.18 * vSettings.scale * (1 + audio.bass * 0.3 * vSettings.intensity);
+
+  c.save();
+
+  // 1. Synthwave Sun at Horizon
+  const sunGrad = safeRadialGradient(c, cx, horizonY - sunRadius * 0.3, 5, cx, horizonY - sunRadius * 0.3, sunRadius);
+  sunGrad.addColorStop(0, '#ffee32');
+  sunGrad.addColorStop(0.5, '#f72585');
+  sunGrad.addColorStop(1, '#7209b7');
+
+  c.fillStyle = sunGrad;
+  c.beginPath();
+  safeArc(c, cx, horizonY - sunRadius * 0.2, sunRadius, Math.PI, 0, false);
+  c.fill();
+
+  // Sun horizontal blinds/slices
+  c.fillStyle = palette.bgDark || '#050508';
+  const sliceCount = 8;
+  for (let s = 0; s < sliceCount; s++) {
+    const sliceY = horizonY - sunRadius * 0.2 - (s / sliceCount) * sunRadius * 0.8;
+    const sliceHeight = 2 + s * 1.5;
+    c.fillRect(cx - sunRadius * 1.1, sliceY, sunRadius * 2.2, sliceHeight);
+  }
+
+  // 2. Wireframe Mountains Silhouette along Horizon
+  c.strokeStyle = rgba(palette.accent || '#4cc9f0', 0.8);
+  c.lineWidth = 2;
+  c.beginPath();
+  c.moveTo(0, horizonY);
+  const mountainPoints = 20;
+  for (let m = 0; m <= mountainPoints; m++) {
+    const mx = (m / mountainPoints) * width;
+    const distFromCenter = Math.abs(mx - cx) / (width * 0.5);
+    const wave = Math.sin(m * 1.5 + time * 0.5) * 15 * audio.mid;
+    const mHeight = (1 - Math.pow(distFromCenter - 0.4, 2)) * 60 * (1 + audio.treble * 0.5) + wave;
+    c.lineTo(mx, horizonY - Math.max(0, mHeight));
+  }
+  c.lineTo(width, horizonY);
+  c.stroke();
+
+  // 3. Perspective Grid moving toward viewer
+  c.strokeStyle = rgba(palette.primary || '#7209b7', 0.6);
+  c.lineWidth = 1.5;
+
+  // Perspective vertical lines converging at horizon
+  const gridLines = pSettings.quality === 'low' ? 12 : 24;
+  for (let g = -gridLines / 2; g <= gridLines / 2; g++) {
+    const startX = cx + (g / (gridLines / 2)) * (width * 0.1);
+    const endX = cx + (g / (gridLines / 2)) * (width * 1.2);
+    c.beginPath();
+    c.moveTo(startX, horizonY);
+    c.lineTo(endX, height);
+    c.stroke();
+  }
+
+  // Horizontal speed lines moving downwards
+  const speed = (time * 120 * vSettings.speed) % 100;
+  const horizLines = 12;
+  for (let h = 0; h < horizLines; h++) {
+    const progress = ((h * 100 / horizLines) + speed) % 100 / 100;
+    const lineY = horizonY + Math.pow(progress, 2) * (height - horizonY);
+    if (lineY > horizonY && lineY < height) {
+      const alpha = progress * (0.3 + audio.bass * 0.7);
+      c.strokeStyle = rgba(palette.secondary || '#f72585', alpha);
+      c.beginPath();
+      c.moveTo(0, lineY);
+      c.lineTo(width, lineY);
+      c.stroke();
+    }
+  }
+
+  c.restore();
+}
+
+// ----------------------------------------------------
+// MARS PRESET
+// ----------------------------------------------------
+function renderMars(ctx: RenderContext) {
+  const { ctx: c, width, height, time, audio, palette, vSettings } = ctx;
+  const { cx, cy } = getCenterCoords(ctx);
+  const marsRadius = Math.min(width, height) * 0.22 * vSettings.scale;
+
+  c.save();
+  c.translate(cx, cy);
+
+  // Mars Atmosphere Glow
+  const atmoGrad = safeRadialGradient(c, 0, 0, marsRadius * 0.9, 0, 0, marsRadius * 1.35);
+  atmoGrad.addColorStop(0, rgba('#ff4d00', 0.6 + audio.bass * 0.4));
+  atmoGrad.addColorStop(1, 'transparent');
+  c.fillStyle = atmoGrad;
+  c.beginPath();
+  safeArc(c, 0, 0, marsRadius * 1.35);
+  c.fill();
+
+  // Mars Planet Body
+  const planetGrad = safeRadialGradient(c, -marsRadius * 0.3, -marsRadius * 0.3, 10, 0, 0, marsRadius);
+  planetGrad.addColorStop(0, '#e05638');
+  planetGrad.addColorStop(0.6, '#b83214');
+  planetGrad.addColorStop(1, '#5c1002');
+  c.fillStyle = planetGrad;
+  c.beginPath();
+  safeArc(c, 0, 0, marsRadius);
+  c.fill();
+
+  // Craters & Valles Marineris Canyon
+  c.strokeStyle = rgba('#3d0700', 0.6);
+  c.lineWidth = 3;
+  c.beginPath();
+  c.ellipse(0, marsRadius * 0.1, marsRadius * 0.6, marsRadius * 0.15, -0.2, 0, Math.PI * 2);
+  c.stroke();
+
+  // Phobos & Deimos Moons orbiting
+  const phobosDist = marsRadius * 1.6;
+  const phobosAngle = time * 0.8 * vSettings.speed;
+  const px = Math.cos(phobosAngle) * phobosDist;
+  const py = Math.sin(phobosAngle) * (phobosDist * 0.4);
+
+  c.fillStyle = '#d4a373';
+  c.beginPath();
+  safeArc(c, px, py, 7 * (1 + audio.treble * 0.5));
+  c.fill();
+
+  const deimosDist = marsRadius * 2.2;
+  const deimosAngle = -time * 0.5 * vSettings.speed + 2;
+  const dx = Math.cos(deimosAngle) * deimosDist;
+  const dy = Math.sin(deimosAngle) * (deimosDist * 0.35);
+
+  c.fillStyle = '#a3b18a';
+  c.beginPath();
+  safeArc(c, dx, dy, 5 * (1 + audio.mid * 0.5));
+  c.fill();
+
+  c.restore();
+}
+
+// ----------------------------------------------------
+// SOLAR SYSTEM PRESET
+// ----------------------------------------------------
+function renderSolarSystem(ctx: RenderContext) {
+  const { ctx: c, width, height, time, audio, vSettings, pSettings } = ctx;
+  const { cx, cy } = getCenterCoords(ctx);
+  const baseScale = Math.min(width, height) * 0.0022 * vSettings.scale;
+
+  c.save();
+  c.translate(cx, cy);
+
+  // Central Sun
+  const sunR = 28 * (1 + audio.bass * 0.35);
+  const sunGrad = safeRadialGradient(c, 0, 0, 2, 0, 0, sunR * 1.6);
+  sunGrad.addColorStop(0, '#ffffff');
+  sunGrad.addColorStop(0.3, '#ffbe0b');
+  sunGrad.addColorStop(0.7, '#fb5607');
+  sunGrad.addColorStop(1, 'transparent');
+
+  c.fillStyle = sunGrad;
+  c.beginPath();
+  safeArc(c, 0, 0, sunR * 1.6);
+  c.fill();
+
+  // Planets Definition
+  const planets = [
+    { name: 'Mercury', dist: 55, size: 4, speed: 2.2, color: '#adb5bd', audioVal: audio.treble },
+    { name: 'Venus', dist: 85, size: 7, speed: 1.6, color: '#d4a373', audioVal: audio.mid },
+    { name: 'Earth', dist: 125, size: 8, speed: 1.2, color: '#48cae4', audioVal: audio.overallEnergy },
+    { name: 'Mars', dist: 165, size: 6, speed: 0.9, color: '#e63946', audioVal: audio.mid },
+    { name: 'Jupiter', dist: 220, size: 16, speed: 0.5, color: '#f4a261', audioVal: audio.bass },
+    { name: 'Saturn', dist: 280, size: 13, speed: 0.3, color: '#e9c46a', audioVal: audio.bass, hasRing: true },
+    { name: 'Uranus', dist: 330, size: 10, speed: 0.2, color: '#80ed99', audioVal: audio.treble },
+    { name: 'Neptune', dist: 370, size: 10, speed: 0.15, color: '#4361ee', audioVal: audio.mid },
+  ];
+
+  const maxPlanets = pSettings.quality === 'low' ? 5 : planets.length;
+
+  for (let p = 0; p < maxPlanets; p++) {
+    const pl = planets[p];
+    const orbitR = pl.dist * baseScale * 180;
+
+    // Orbit Ring
+    c.strokeStyle = rgba('#ffffff', 0.12 + pl.audioVal * 0.25);
+    c.lineWidth = 1;
+    c.beginPath();
+    c.ellipse(0, 0, orbitR, orbitR * 0.45, 0, 0, Math.PI * 2);
+    c.stroke();
+
+    // Planet Position
+    const angle = time * pl.speed * vSettings.speed * 0.6;
+    const px = Math.cos(angle) * orbitR;
+    const py = Math.sin(angle) * (orbitR * 0.45);
+
+    // Saturn Ring
+    if (pl.hasRing) {
+      c.strokeStyle = rgba('#e9c46a', 0.7);
+      c.lineWidth = 3;
+      c.beginPath();
+      c.ellipse(px, py, pl.size * 2, pl.size * 0.8, -0.3, 0, Math.PI * 2);
+      c.stroke();
+    }
+
+    // Planet Circle
+    c.fillStyle = pl.color;
+    c.beginPath();
+    safeArc(c, px, py, pl.size * (1 + pl.audioVal * 0.4));
+    c.fill();
+  }
+
+  c.restore();
+}
+
+// ----------------------------------------------------
 // MAIN VISUALIZER ENGINE ROUTER
 // ----------------------------------------------------
 export function renderVisualizer(ctx: RenderContext) {
   const { preset } = ctx.vSettings;
 
   switch (preset) {
+    case 'synthwave':
+      renderSynthwave(ctx);
+      break;
+    case 'mars':
+      renderMars(ctx);
+      break;
+    case 'solar_system':
+      renderSolarSystem(ctx);
+      break;
+    case 'jupiter':
+      renderJupiter(ctx);
+      break;
+    case 'saturn':
+      renderSaturn(ctx);
+      break;
+    case 'neptune':
+      renderNeptune(ctx);
+      break;
+    case 'supernova':
+      renderSupernova(ctx);
+      break;
+    case 'eclipse':
+      renderEclipse(ctx);
+      break;
+    case 'blackhole':
+      renderBlackHole(ctx);
+      break;
+    case 'pulsar':
+      renderPulsar(ctx);
+      break;
+    case 'exoplanet':
+      renderExoplanet(ctx);
+      break;
     case 'ocean':
       renderOcean(ctx);
       break;

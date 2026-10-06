@@ -39,7 +39,10 @@ interface SettingsPanelProps {
   audioStatus: 'idle' | 'capturing' | 'silent' | 'denied' | 'unavailable';
   currentDeviceLabel: string;
   errorMessage: string | null;
+  audioDevices: AudioDeviceInfo[];
+  refreshAudioDevices: () => void;
   onStartScreenAudio: () => void;
+  onStartMicAudio: () => void;
   onStopAudio: () => void;
   isFullscreen: boolean;
   toggleFullscreen: () => void;
@@ -50,27 +53,45 @@ interface SettingsPanelProps {
   onClose: () => void;
 }
 
-const PRESET_LIST: { id: VisualizerPresetId; label: string; icon: string }[] = [
-  { id: 'galaxy', label: 'Galaxy', icon: '🌌' },
-  { id: 'ocean', label: 'Ocean', icon: '🌊' },
-  { id: 'sunshine', label: 'Sunshine', icon: '☀️' },
-  { id: 'aurora', label: 'Aurora', icon: '✨' },
-  { id: 'neon', label: 'Neon Grid', icon: '🌆' },
-  { id: 'cosmic', label: 'Cosmic Dust', icon: '💫' },
-  { id: 'fire', label: 'Inferno Fire', icon: '🔥' },
-  { id: 'matrix', label: 'Matrix Rain', icon: '📟' },
-  { id: 'particle', label: 'Swarm Field', icon: '🪐' },
-  { id: 'radial', label: 'Radial Ring', icon: '🎯' },
-  { id: 'wave', label: 'Fluid Wave', icon: '〰️' },
-  { id: 'spectrum', label: 'Spectrum Bars', icon: '📊' },
-  { id: 'oscilloscope', label: 'Oscilloscope', icon: '📈' },
-  { id: 'starfield', label: '3D Starfield', icon: '⭐' },
-  { id: 'fluid', label: 'Organic Fluid', icon: '💧' },
-  { id: 'vortex', label: 'Dark Vortex', icon: '🌀' },
-  { id: 'rain', label: 'Neon Rain', icon: '🌧️' },
-  { id: 'plasma', label: 'Sine Plasma', icon: '🎨' },
-  { id: 'digital', label: 'Digital VFD', icon: '📟' },
-  { id: 'minimal', label: 'Zen Minimal', icon: '⭕' },
+const PRESET_LIST: { id: VisualizerPresetId; label: string; icon: string; category: string }[] = [
+  // Celestial & Planetary
+  { id: 'solar_system', label: 'Solar System Orbits', icon: '☀️', category: 'Planets' },
+  { id: 'mars', label: 'Mars Red Orbit', icon: '🔴', category: 'Planets' },
+  { id: 'jupiter', label: 'Jupiter Storm', icon: '🪐', category: 'Planets' },
+  { id: 'saturn', label: 'Saturn Rings', icon: '🪐', category: 'Planets' },
+  { id: 'neptune', label: 'Neptune Ice', icon: '🌀', category: 'Planets' },
+  { id: 'supernova', label: 'Supernova', icon: '💥', category: 'Planets' },
+  { id: 'eclipse', label: 'Solar Eclipse', icon: '🌑', category: 'Planets' },
+  { id: 'blackhole', label: 'Black Hole', icon: '🕳️', category: 'Planets' },
+  { id: 'pulsar', label: 'Pulsar Star', icon: '⚡', category: 'Planets' },
+  { id: 'exoplanet', label: 'Exoplanet', icon: '🌍', category: 'Planets' },
+  { id: 'galaxy', label: 'Galaxy Void', icon: '🌌', category: 'Planets' },
+
+  // Ambient Elements
+  { id: 'ocean', label: 'Ocean Waves', icon: '🌊', category: 'Elements' },
+  { id: 'sunshine', label: 'Solar Sunshine', icon: '☀️', category: 'Elements' },
+  { id: 'aurora', label: 'Northern Aurora', icon: '✨', category: 'Elements' },
+  { id: 'fire', label: 'Inferno Fire', icon: '🔥', category: 'Elements' },
+  { id: 'rain', label: 'Neon Rain', icon: '🌧️', category: 'Elements' },
+  { id: 'fluid', label: 'Organic Fluid', icon: '💧', category: 'Elements' },
+
+  // Cyber & Synthwave
+  { id: 'synthwave', label: '80s Synthwave Grid', icon: '🕶️', category: 'Cyber' },
+  { id: 'neon', label: 'Neon Grid', icon: '🌆', category: 'Cyber' },
+  { id: 'cosmic', label: 'Cosmic Dust', icon: '💫', category: 'Cyber' },
+  { id: 'matrix', label: 'Matrix Rain', icon: '📟', category: 'Cyber' },
+  { id: 'particle', label: 'Swarm Field', icon: '🪐', category: 'Cyber' },
+  { id: 'starfield', label: '3D Starfield', icon: '⭐', category: 'Cyber' },
+  { id: 'vortex', label: 'Dark Vortex', icon: '🌀', category: 'Cyber' },
+
+  // Spectrum & Waves
+  { id: 'radial', label: 'Radial Ring', icon: '🎯', category: 'Spectrum' },
+  { id: 'wave', label: 'Fluid Wave', icon: '〰️', category: 'Spectrum' },
+  { id: 'spectrum', label: 'Spectrum Bars', icon: '📊', category: 'Spectrum' },
+  { id: 'oscilloscope', label: 'Oscilloscope', icon: '📈', category: 'Spectrum' },
+  { id: 'plasma', label: 'Sine Plasma', icon: '🎨', category: 'Spectrum' },
+  { id: 'digital', label: 'Digital VFD', icon: '📟', category: 'Spectrum' },
+  { id: 'minimal', label: 'Zen Minimal', icon: '⭕', category: 'Spectrum' },
 ];
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
@@ -80,7 +101,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   audioStatus,
   currentDeviceLabel,
   errorMessage,
+  audioDevices,
+  refreshAudioDevices,
   onStartScreenAudio,
+  onStartMicAudio,
   onStopAudio,
   isFullscreen,
   toggleFullscreen,
@@ -375,7 +399,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </div>
 
             {/* Mode Switcher */}
-            <div className="grid grid-cols-2 gap-2 bg-slate-900 p-1 rounded-xl border border-slate-800">
+            <div className="grid grid-cols-3 gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800 text-[11px]">
               <button
                 onClick={() =>
                   updateSettings((prev) => ({
@@ -383,7 +407,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     audio: { ...prev.audio, mode: 'screen_audio' },
                   }))
                 }
-                className={`py-1.5 rounded-lg font-semibold transition-all ${
+                className={`py-1.5 px-1 rounded-lg font-semibold transition-all ${
                   settings.audio.mode === 'screen_audio'
                     ? 'bg-cyan-600 text-white shadow'
                     : 'text-slate-400 hover:text-slate-200'
@@ -395,16 +419,31 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 onClick={() =>
                   updateSettings((prev) => ({
                     ...prev,
+                    audio: { ...prev.audio, mode: 'mic' },
+                  }))
+                }
+                className={`py-1.5 px-1 rounded-lg font-semibold transition-all ${
+                  settings.audio.mode === 'mic'
+                    ? 'bg-cyan-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Microphone
+              </button>
+              <button
+                onClick={() =>
+                  updateSettings((prev) => ({
+                    ...prev,
                     audio: { ...prev.audio, mode: 'demo_synth' },
                   }))
                 }
-                className={`py-1.5 rounded-lg font-semibold transition-all ${
+                className={`py-1.5 px-1 rounded-lg font-semibold transition-all ${
                   settings.audio.mode === 'demo_synth'
                     ? 'bg-cyan-600 text-white shadow'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Built-in Synth Demo
+                Synth Demo
               </button>
             </div>
 
@@ -412,7 +451,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             {settings.audio.mode === 'screen_audio' && (
               <div className="space-y-3">
                 <p className="text-xs text-slate-300 leading-relaxed bg-slate-900/50 p-3 rounded-xl border border-slate-800">
-                  Share a screen, window, or browser tab and enable <strong>&quot;Share audio&quot;</strong>. Only the shared audio is used by the visualizer.
+                  Share a screen, window, or browser tab and enable <strong>&quot;Share audio&quot;</strong>. (Best for Desktop Chrome/Edge).
                 </p>
 
                 {/* Status and Action Buttons */}
@@ -459,6 +498,72 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     </button>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Microphone Controls (Great for Mobile & Room Audio) */}
+            {settings.audio.mode === 'mic' && (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-300 leading-relaxed bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                  Capture live microphone audio from your phone, tablet, or PC. Ideal for mobile web & ambient room music!
+                </p>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-slate-300 font-medium text-xs">Select Microphone</label>
+                    <button
+                      onClick={refreshAudioDevices}
+                      title="Refresh microphone list"
+                      className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <select
+                    value={settings.audio.deviceId || 'default'}
+                    onChange={(e) =>
+                      updateSettings((prev) => ({
+                        ...prev,
+                        audio: { ...prev.audio, deviceId: e.target.value },
+                      }))
+                    }
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-slate-200 outline-none focus:border-cyan-500 text-xs"
+                  >
+                    <option value="default">Default Microphone</option>
+                    {audioDevices.map((d) => (
+                      <option key={d.deviceId} value={d.deviceId}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  {audioStatus === 'capturing' ? (
+                    <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/60 space-y-2">
+                      <div className="text-emerald-400 font-semibold flex items-center">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping mr-2" />
+                        Microphone Active
+                      </div>
+                      <div className="text-[11px] text-slate-300 truncate">
+                        Source: <span className="text-white font-medium">{currentDeviceLabel}</span>
+                      </div>
+                      <button
+                        onClick={onStopAudio}
+                        className="w-full mt-1 py-2 bg-red-950/60 hover:bg-red-900/70 text-red-300 border border-red-800/60 font-semibold rounded-lg text-xs transition-all shadow"
+                      >
+                        Stop Microphone
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={onStartMicAudio}
+                      className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg flex items-center justify-center space-x-2"
+                    >
+                      <Mic className="w-4 h-4" />
+                      <span>Start Microphone</span>
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 

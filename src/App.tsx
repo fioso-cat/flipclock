@@ -26,6 +26,18 @@ import {
 
 const STORAGE_KEY = 'ambient_flip_visualizer_settings_v1';
 
+const EMPTY_AUDIO_ANALYSIS: AudioAnalysis = {
+  bass: 0,
+  mid: 0,
+  treble: 0,
+  overallEnergy: 0,
+  peakFreq: 0,
+  avgFreq: 0,
+  rawFrequencyData: new Uint8Array(0),
+  rawTimeDomainData: new Uint8Array(0),
+  isAudioActive: false,
+};
+
 const DEFAULT_SETTINGS: AppSettings = {
   clock: {
     use24Hour: true,
@@ -403,17 +415,7 @@ export default function App() {
       // Analyze Audio Frame
       const audioAnalysis: AudioAnalysis = audioManagerRef.current
         ? audioManagerRef.current.analyze(settings.audio)
-        : {
-            bass: 0,
-            mid: 0,
-            treble: 0,
-            overallEnergy: 0,
-            peakFreq: 0,
-            avgFreq: 0,
-            rawFrequencyData: new Uint8Array(0),
-            rawTimeDomainData: new Uint8Array(0),
-            isAudioActive: false,
-          };
+        : EMPTY_AUDIO_ANALYSIS;
 
       const palette = getColorPalette(settings.color);
       const timeInSec = (now - startTime) / 1000;

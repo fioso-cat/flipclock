@@ -1395,80 +1395,257 @@ function renderExoplanet(ctx: RenderContext) {
   c.restore();
 }
 
+// Pre-allocated persistent Float32Array for Synthwave 3D terrain vertices
+// Max 50 rows x 50 cols, each vertex holds 4 floats: [px, py, scale, hRatio]
+const MAX_SYNTH_ROWS = 50;
+const MAX_SYNTH_COLS = 50;
+const synthwaveVertexBuffer = new Float32Array(MAX_SYNTH_ROWS * MAX_SYNTH_COLS * 4);
+
+// Persistent Ring Buffer for Frozen Terrain Row Snapshots
+let frozenTerrainBuffer: Float32Array[] = [];
+let accumulatedScrollZ = 0;
+let snapshotStepCount = 0;
+let smoothSunScaleMultiplier = 1.0;
+
+// Function to generate a SINGLE Frozen Snapshot Row at the Horizon (wave_0)
+function createFrozenHorizonRow(
+  cols: number,
+  audio: AudioAnalysis,
+  vSettings: VisualizerSettings,
+  stepIdx: number
+): Float32Array {
+  const rowY = new Float32Array(cols + 1);
+
+  // Dampened audio energy for instant snapshot calculation
+  const bassVal = audio.bass * 0.45;
+  const midVal = audio.mid * 0.35;
+  const audioEnergy = (bassVal + midVal) * Math.min(2.0, vSettings.intensity);
+
+  for (let cIdx = 0; cIdx <= cols; cIdx++) {
+    const valleyDist = Math.abs(cIdx - cols / 2) / (cols / 2); // 0 at center X=0, 1 at edges
+    const mountainFactor = Math.pow(valleyDist, 2.2); // Quadratic attenuation from center
+
+    // Static 3D mountain terrain ridges on left & right flanks
+    const baseNoise1 = Math.sin(cIdx * 1.35 + stepIdx * 0.65) * 35;
+    const baseNoise2 = Math.cos(cIdx * 2.7 - stepIdx * 1.15) * 20;
+    const flankStaticHeight = mountainFactor * (85 + baseNoise1 + baseNoise2);
+
+    // Flank audio displacement AT THIS INSTANT (frozen snapshot!)
+    const organicPattern =
+      Math.sin(cIdx * 0.85 + stepIdx * 0.45) *
+      Math.cos(cIdx * 1.6 - stepIdx * 0.75);
+    const flankAudioDisplacement = mountainFactor * organicPattern * (15 + audioEnergy * 45);
+
+    // Center valley gentle organic dips/bumps (shallow valley)
+    const centerGentleBumps = Math.sin(cIdx * 0.9 + stepIdx * 0.5) * (4 + audioEnergy * 8);
+
+    const totalRawHeight = flankStaticHeight + flankAudioDisplacement + centerGentleBumps;
+
+    // Strict MAX_ALLOWED_HEIGHT Ceiling Clamp so mountains NEVER obscure the sun or camera
+    const MAX_ALLOWED_HEIGHT = 140;
+    const clampedHeight = Math.min(totalRawHeight, MAX_ALLOWED_HEIGHT);
+
+    rowY[cIdx] = -clampedHeight; // Frozen immutable height snapshot!
+  }
+
+  return rowY;
+}
+
 // ----------------------------------------------------
-// SYNTHWAVE PRESET
+// SYNTHWAVE PRESET (Frozen Terrain Snapshots & Smooth Lerp Sun Scaling)
 // ----------------------------------------------------
 function renderSynthwave(ctx: RenderContext) {
-  const { ctx: c, width, height, time, audio, palette, vSettings, pSettings } = ctx;
+  const { ctx: c, width, height, audio, palette, vSettings, pSettings, deltaTime } = ctx;
   const { cx, cy } = getCenterCoords(ctx);
-  const horizonY = cy + height * 0.05;
-  const sunRadius = Math.min(width, height) * 0.18 * vSettings.scale * (1 + audio.bass * 0.3 * vSettings.intensity);
+  const horizonY = cy + height * 0.02;
+
+  // 1. Smooth Sun Scaling (Mặt Trời tĩnh, phóng to mượt bằng Lerp)
+  const targetSunScale = 1.0 + audio.bass * 0.25 * Math.min(2.0, vSettings.intensity);
+  smoothSunScaleMultiplier += (targetSunScale - smoothSunScaleMultiplier) * 0.06; // Lerp factor 0.06 for calm imposing scale
+
+  const baseSunR = Math.min(width, height) * 0.22 * vSettings.scale;
+  const sunRadius = baseSunR * smoothSunScaleMultiplier;
 
   c.save();
 
-  // 1. Synthwave Sun at Horizon
-  const sunGrad = safeRadialGradient(c, cx, horizonY - sunRadius * 0.3, 5, cx, horizonY - sunRadius * 0.3, sunRadius);
-  sunGrad.addColorStop(0, '#ffee32');
-  sunGrad.addColorStop(0.5, '#f72585');
-  sunGrad.addColorStop(1, '#7209b7');
+  // 1. Synthwave Sky Background Gradient
+  const skyGrad = c.createLinearGradient(0, 0, 0, horizonY);
+  skyGrad.addColorStop(0, '#05021a');
+  skyGrad.addColorStop(0.5, '#190a38');
+  skyGrad.addColorStop(1, '#3a0c5c');
+  c.fillStyle = skyGrad;
+  c.fillRect(0, 0, width, height);
 
-  c.fillStyle = sunGrad;
+  // 2. Giant Outrun Sun Outer Glow Aura (Pulsing smoothly to Bass)
+  const sunAuraRadius = sunRadius * (1.5 + audio.bass * 0.4 * vSettings.intensity);
+  const sunAuraGrad = safeRadialGradient(
+    c,
+    cx,
+    horizonY - sunRadius * 0.2,
+    5,
+    cx,
+    horizonY - sunRadius * 0.2,
+    sunAuraRadius
+  );
+  sunAuraGrad.addColorStop(0, rgba('#ff007f', 0.85));
+  sunAuraGrad.addColorStop(0.4, rgba('#f72585', 0.55));
+  sunAuraGrad.addColorStop(0.8, rgba('#7209b7', 0.25));
+  sunAuraGrad.addColorStop(1, 'transparent');
+
+  c.fillStyle = sunAuraGrad;
   c.beginPath();
-  safeArc(c, cx, horizonY - sunRadius * 0.2, sunRadius, Math.PI, 0, false);
+  safeArc(c, cx, horizonY - sunRadius * 0.2, sunAuraRadius);
   c.fill();
 
-  // Sun horizontal blinds/slices
-  c.fillStyle = palette.bgDark || '#050508';
-  const sliceCount = 8;
-  for (let s = 0; s < sliceCount; s++) {
-    const sliceY = horizonY - sunRadius * 0.2 - (s / sliceCount) * sunRadius * 0.8;
-    const sliceHeight = 2 + s * 1.5;
-    c.fillRect(cx - sunRadius * 1.1, sliceY, sunRadius * 2.2, sliceHeight);
-  }
-
-  // 2. Wireframe Mountains Silhouette along Horizon
-  c.strokeStyle = rgba(palette.accent || '#4cc9f0', 0.8);
-  c.lineWidth = 2;
+  // 3. Iconic Outrun Sun Disc (CLIPPED strictly inside Sun Circle)
+  c.save();
   c.beginPath();
-  c.moveTo(0, horizonY);
-  const mountainPoints = 20;
-  for (let m = 0; m <= mountainPoints; m++) {
-    const mx = (m / mountainPoints) * width;
-    const distFromCenter = Math.abs(mx - cx) / (width * 0.5);
-    const wave = Math.sin(m * 1.5 + time * 0.5) * 15 * audio.mid;
-    const mHeight = (1 - Math.pow(distFromCenter - 0.4, 2)) * 60 * (1 + audio.treble * 0.5) + wave;
-    c.lineTo(mx, horizonY - Math.max(0, mHeight));
+  safeArc(c, cx, horizonY - sunRadius * 0.05, sunRadius, Math.PI, 0, false);
+  c.closePath();
+  c.clip(); // Ensure horizontal slices NEVER spill outside the sun!
+
+  // Sun Disc Gradient
+  const sunDiscGrad = c.createLinearGradient(0, horizonY - sunRadius * 1.1, 0, horizonY);
+  sunDiscGrad.addColorStop(0, '#ffee32'); // Golden yellow top
+  sunDiscGrad.addColorStop(0.35, '#ff70a6'); // Hot neon pink
+  sunDiscGrad.addColorStop(0.75, '#f72585'); // Deep magenta
+  sunDiscGrad.addColorStop(1, '#480ca8'); // Deep purple bottom
+
+  c.fillStyle = sunDiscGrad;
+  c.fillRect(cx - sunRadius * 1.1, horizonY - sunRadius * 1.1, sunRadius * 2.2, sunRadius * 1.2);
+
+  // Venetian Blind Horizontal Cuts (CLIPPED inside Sun)
+  const sliceCount = 10;
+  c.fillStyle = '#190a38';
+  for (let s = 0; s < sliceCount; s++) {
+    const progress = s / sliceCount; // 0 to 1
+    const sliceY = horizonY - (1 - Math.pow(progress, 1.4)) * sunRadius * 0.95;
+    const sliceHeight = (2.5 + progress * 8) * (1 + audio.mid * 0.3);
+
+    c.fillRect(cx - sunRadius * 1.2, sliceY, sunRadius * 2.4, sliceHeight);
   }
-  c.lineTo(width, horizonY);
-  c.stroke();
+  c.restore(); // Restore sun clipping state
 
-  // 3. Perspective Grid moving toward viewer
-  c.strokeStyle = rgba(palette.primary || '#7209b7', 0.6);
-  c.lineWidth = 1.5;
+  // 4. Frozen Terrain Snapshots & Array Shift Ring Buffer
+  const cols = Math.min(MAX_SYNTH_COLS - 1, pSettings.quality === 'low' ? 24 : 38);
+  const baseRows = Math.min(MAX_SYNTH_ROWS - 10, pSettings.quality === 'low' ? 22 : 32);
+  const extraPaddingRows = 6; // Overscan padding rows extending past bottom camera edge
+  const totalRows = Math.min(MAX_SYNTH_ROWS - 2, baseRows + extraPaddingRows);
 
-  // Perspective vertical lines converging at horizon
-  const gridLines = pSettings.quality === 'low' ? 12 : 24;
-  for (let g = -gridLines / 2; g <= gridLines / 2; g++) {
-    const startX = cx + (g / (gridLines / 2)) * (width * 0.1);
-    const endX = cx + (g / (gridLines / 2)) * (width * 1.2);
-    c.beginPath();
-    c.moveTo(startX, horizonY);
-    c.lineTo(endX, height);
-    c.stroke();
+  const colWidth = (width * 2.2) / cols;
+  const rowDepth = 30;
+
+  // Continuous Z scroll accumulation
+  const dt = Math.min(0.1, deltaTime || 0.016);
+  accumulatedScrollZ += dt * 90 * vSettings.speed;
+
+  // Initialize frozen terrain ring buffer if empty or resized
+  if (
+    frozenTerrainBuffer.length === 0 ||
+    frozenTerrainBuffer[0]?.length !== cols + 1
+  ) {
+    frozenTerrainBuffer = [];
+    for (let r = 0; r <= totalRows + 4; r++) {
+      frozenTerrainBuffer.push(createFrozenHorizonRow(cols, audio, vSettings, r));
+    }
   }
 
-  // Horizontal speed lines moving downwards
-  const speed = (time * 120 * vSettings.speed) % 100;
-  const horizLines = 12;
-  for (let h = 0; h < horizLines; h++) {
-    const progress = ((h * 100 / horizLines) + speed) % 100 / 100;
-    const lineY = horizonY + Math.pow(progress, 2) * (height - horizonY);
-    if (lineY > horizonY && lineY < height) {
-      const alpha = progress * (0.3 + audio.bass * 0.7);
-      c.strokeStyle = rgba(palette.secondary || '#f72585', alpha);
+  // Shift Buffer when Z scroll passes 1 rowDepth -> Push new Horizon Wave (wave_0)
+  while (accumulatedScrollZ >= rowDepth) {
+    accumulatedScrollZ -= rowDepth;
+    snapshotStepCount++;
+
+    // Generate 1 NEW Frozen Horizon Row (wave_0) using instant audio FFT
+    const newHorizonSnapshot = createFrozenHorizonRow(cols, audio, vSettings, snapshotStepCount);
+
+    // Push new horizon wave at front (index 0) and drop oldest front row
+    frozenTerrainBuffer.unshift(newHorizonSnapshot);
+    if (frozenTerrainBuffer.length > totalRows + 5) {
+      frozenTerrainBuffer.pop();
+    }
+  }
+
+  // Camera Bounce & Perspective Setup
+  const fov = 380;
+  const cameraY = -70 + audio.bass * 12 * vSettings.intensity;
+  const cameraZ = 25;
+
+  // Populate pre-allocated Float32Array vertex buffer with FROZEN row Y values
+  for (let r = 0; r <= totalRows + 1; r++) {
+    const gridR = r - 1; // Start at -1 behind horizon
+    const z3d = gridR * rowDepth - accumulatedScrollZ + 5;
+
+    // Read the FROZEN Y snapshot row from buffer
+    const frozenRow = frozenTerrainBuffer[r] || frozenTerrainBuffer[0];
+    const rowOffset = r * MAX_SYNTH_COLS * 4;
+
+    for (let cIdx = 0; cIdx <= cols; cIdx++) {
+      const x3d = (cIdx - cols / 2) * colWidth;
+      const y3d = frozenRow[cIdx] !== undefined ? frozenRow[cIdx] : 0; // Frozen immutable height!
+
+      const scale = fov / Math.max(1, z3d + cameraZ);
+      const px = cx + x3d * scale;
+      const py = horizonY + (y3d - cameraY) * scale;
+      const hRatio = Math.min(1, Math.abs(y3d) / 250);
+
+      const vIdx = rowOffset + cIdx * 4;
+      synthwaveVertexBuffer[vIdx] = px;
+      synthwaveVertexBuffer[vIdx + 1] = py;
+      synthwaveVertexBuffer[vIdx + 2] = scale;
+      synthwaveVertexBuffer[vIdx + 3] = hRatio;
+    }
+  }
+
+  // Render 3D Wireframe Quads from Float32Array (Back to Front)
+  for (let r = totalRows; r >= 0; r--) {
+    const rowProgress = r / totalRows; // 1 at back (horizon), 0 at front (camera)
+
+    // Dynamic Grid Brightness Pulse linked smoothly to Mid-Range + Bass Energy
+    const emissiveGlow = 0.45 + (audio.mid * 0.45 + audio.bass * 0.35) * vSettings.intensity;
+    const alpha = Math.min(1.0, (1 - Math.pow(Math.max(0, rowProgress), 1.6)) * emissiveGlow);
+
+    const r0Offset = r * MAX_SYNTH_COLS * 4;
+    const r1Offset = (r + 1) * MAX_SYNTH_COLS * 4;
+
+    for (let cIdx = 0; cIdx < cols; cIdx++) {
+      const idx00 = r0Offset + cIdx * 4;
+      const idx10 = r0Offset + (cIdx + 1) * 4;
+      const idx01 = r1Offset + cIdx * 4;
+      const idx11 = r1Offset + (cIdx + 1) * 4;
+
+      const p00_px = synthwaveVertexBuffer[idx00];
+      const p00_py = synthwaveVertexBuffer[idx00 + 1];
+      const p10_px = synthwaveVertexBuffer[idx10];
+      const p10_py = synthwaveVertexBuffer[idx10 + 1];
+
+      // Skip rendering if vertices are far above horizon
+      if (p00_py < horizonY - 120 && p10_py < horizonY - 120) continue;
+
+      const p01_px = synthwaveVertexBuffer[idx01];
+      const p01_py = synthwaveVertexBuffer[idx01 + 1];
+      const p11_px = synthwaveVertexBuffer[idx11];
+      const p11_py = synthwaveVertexBuffer[idx11 + 1];
+
       c.beginPath();
-      c.moveTo(0, lineY);
-      c.lineTo(width, lineY);
+      c.moveTo(p00_px, p00_py);
+      c.lineTo(p10_px, p10_py);
+      c.lineTo(p11_px, p11_py);
+      c.lineTo(p01_px, p01_py);
+      c.closePath();
+
+      // Dark facet fill to occlude sky/sun background behind mountains
+      c.fillStyle = '#080117';
+      c.fill();
+
+      // Wireframe Stroke with Audio Reactive Glow Width
+      const hRatio = Math.max(synthwaveVertexBuffer[idx00 + 3], synthwaveVertexBuffer[idx10 + 3]);
+      const wireColor =
+        hRatio > 0.35
+          ? rgba(palette.primary || '#4cc9f0', alpha)
+          : rgba(palette.secondary || '#ff007f', alpha * 0.85);
+
+      c.strokeStyle = wireColor;
+      c.lineWidth = (1 + (1 - Math.max(0, rowProgress)) * 1.5) * (1 + (audio.mid + audio.bass) * 0.25);
       c.stroke();
     }
   }

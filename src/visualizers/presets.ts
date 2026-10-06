@@ -1215,36 +1215,91 @@ function renderEclipse(ctx: RenderContext) {
 }
 
 // ----------------------------------------------------
-// PLANET 6: BLACK HOLE (Event Horizon & Accretion Disk)
+// PLANET 6: BLACK HOLE (Event Horizon, Lensing & Relativistic Jets)
 // ----------------------------------------------------
 function renderBlackHole(ctx: RenderContext) {
-  const { ctx: c, time, audio, palette, vSettings } = ctx;
+  const { ctx: c, time, audio, palette, vSettings, pSettings } = ctx;
   const { cx, cy } = getCenterCoords(ctx);
-  const holeRadius = 80 * vSettings.scale;
+  const holeRadius = 75 * vSettings.scale;
 
   c.save();
   c.translate(cx, cy);
 
-  // Swirling Accretion Disk
-  c.rotate(time * 0.5 * vSettings.speed);
-  const diskR = holeRadius * (1.8 + audio.bass * 0.6 * vSettings.intensity);
-  const diskGrad = safeRadialGradient(c, 0, 0, holeRadius, 0, 0, diskR);
-  diskGrad.addColorStop(0, palette.accent);
-  diskGrad.addColorStop(0.5, palette.secondary);
-  diskGrad.addColorStop(1, 'transparent');
-  c.fillStyle = diskGrad;
+  // 1. Relativistic Polar Jets blasting vertically on audio peak
+  const jetPower = audio.bass * 1.2 * vSettings.intensity;
+  if (jetPower > 0.2) {
+    const jetLen = (200 + jetPower * 250) * vSettings.scale;
+    const jetGrad = safeRadialGradient(c, 0, 0, 5, 0, 0, jetLen);
+    jetGrad.addColorStop(0, '#ffffff');
+    jetGrad.addColorStop(0.3, palette.accent || '#48cae4');
+    jetGrad.addColorStop(0.7, palette.primary || '#7209b7');
+    jetGrad.addColorStop(1, 'transparent');
+
+    c.fillStyle = jetGrad;
+    c.beginPath();
+    // North Jet
+    c.moveTo(-10, 0);
+    c.lineTo(-30 * jetPower, -jetLen);
+    c.lineTo(30 * jetPower, -jetLen);
+    c.lineTo(10, 0);
+    // South Jet
+    c.lineTo(10, 0);
+    c.lineTo(30 * jetPower, jetLen);
+    c.lineTo(-30 * jetPower, jetLen);
+    c.lineTo(-10, 0);
+    c.fill();
+  }
+
+  // 2. Gravitational Lensing Outer Halo
+  const haloR = holeRadius * (2.2 + audio.bass * 0.8 * vSettings.intensity);
+  const haloGrad = safeRadialGradient(c, 0, 0, holeRadius, 0, 0, haloR);
+  haloGrad.addColorStop(0, rgba('#ffffff', 0.9));
+  haloGrad.addColorStop(0.3, rgba(palette.accent || '#ff70a6', 0.6));
+  haloGrad.addColorStop(0.7, rgba(palette.primary || '#7000ff', 0.3));
+  haloGrad.addColorStop(1, 'transparent');
+
+  c.fillStyle = haloGrad;
   c.beginPath();
-  c.ellipse(0, 0, diskR, diskR * 0.35, 0, 0, Math.PI * 2);
+  safeArc(c, 0, 0, haloR);
   c.fill();
 
-  // Gravitational Einstein Ring
-  c.strokeStyle = rgba('#ffffff', 0.8 + audio.treble * 0.2);
-  c.lineWidth = 3;
+  // 3. Swirling Accretion Disk (3D Elliptical perspective)
+  c.rotate(time * 0.6 * vSettings.speed);
+  const diskR = holeRadius * (2.0 + audio.mid * 0.8 * vSettings.intensity);
+  const diskGrad = safeRadialGradient(c, 0, 0, holeRadius, 0, 0, diskR);
+  diskGrad.addColorStop(0, '#ffffff');
+  diskGrad.addColorStop(0.3, palette.accent || '#ff9770');
+  diskGrad.addColorStop(0.7, palette.secondary || '#7000ff');
+  diskGrad.addColorStop(1, 'transparent');
+
+  c.fillStyle = diskGrad;
   c.beginPath();
-  safeArc(c, 0, 0, holeRadius * 1.15);
+  c.ellipse(0, 0, diskR, diskR * 0.32, 0, 0, Math.PI * 2);
+  c.fill();
+
+  // Swirling Particle Dust in Accretion Disk
+  if (pSettings.quality !== 'low') {
+    const dustCount = 36;
+    for (let d = 0; d < dustCount; d++) {
+      const dAngle = (d / dustCount) * Math.PI * 2 + time * 1.2;
+      const dDist = holeRadius * 1.1 + (d % 6) * 18 * (1 + audio.mid * 0.5);
+      const dx = Math.cos(dAngle) * dDist;
+      const dy = Math.sin(dAngle) * (dDist * 0.32);
+      c.fillStyle = d % 2 === 0 ? '#ffffff' : palette.accent || '#70e000';
+      c.beginPath();
+      safeArc(c, dx, dy, 2.5 * (1 + audio.treble * 0.8));
+      c.fill();
+    }
+  }
+
+  // 4. Photon Ring (Blinding White Boundary)
+  c.strokeStyle = rgba('#ffffff', 0.95);
+  c.lineWidth = 3.5;
+  c.beginPath();
+  safeArc(c, 0, 0, holeRadius * 1.08);
   c.stroke();
 
-  // Pitch Black Event Horizon
+  // 5. Pitch Black Event Horizon (Singularity Void)
   c.fillStyle = '#000000';
   c.beginPath();
   safeArc(c, 0, 0, holeRadius);
@@ -1483,7 +1538,7 @@ function renderMars(ctx: RenderContext) {
 }
 
 // ----------------------------------------------------
-// SOLAR SYSTEM PRESET
+// SOLAR SYSTEM PRESET (13 Celestial Bodies Mapped to 13 Musical Frequency Notes)
 // ----------------------------------------------------
 function renderSolarSystem(ctx: RenderContext) {
   const { ctx: c, width, height, time, audio, vSettings, pSettings } = ctx;
@@ -1493,63 +1548,109 @@ function renderSolarSystem(ctx: RenderContext) {
   c.save();
   c.translate(cx, cy);
 
-  // Central Sun
-  const sunR = 28 * (1 + audio.bass * 0.35);
-  const sunGrad = safeRadialGradient(c, 0, 0, 2, 0, 0, sunR * 1.6);
+  // Central Sun (Pulsing to Master Sub-Bass Energy)
+  const sunR = (26 + audio.bass * 35 * vSettings.intensity) * vSettings.scale;
+  const sunGrad = safeRadialGradient(c, 0, 0, 2, 0, 0, sunR * 1.8);
   sunGrad.addColorStop(0, '#ffffff');
   sunGrad.addColorStop(0.3, '#ffbe0b');
-  sunGrad.addColorStop(0.7, '#fb5607');
+  sunGrad.addColorStop(0.65, '#fb5607');
   sunGrad.addColorStop(1, 'transparent');
 
   c.fillStyle = sunGrad;
   c.beginPath();
-  safeArc(c, 0, 0, sunR * 1.6);
+  safeArc(c, 0, 0, sunR * 1.8);
   c.fill();
 
-  // Planets Definition
-  const planets = [
-    { name: 'Mercury', dist: 55, size: 4, speed: 2.2, color: '#adb5bd', audioVal: audio.treble },
-    { name: 'Venus', dist: 85, size: 7, speed: 1.6, color: '#d4a373', audioVal: audio.mid },
-    { name: 'Earth', dist: 125, size: 8, speed: 1.2, color: '#48cae4', audioVal: audio.overallEnergy },
-    { name: 'Mars', dist: 165, size: 6, speed: 0.9, color: '#e63946', audioVal: audio.mid },
-    { name: 'Jupiter', dist: 220, size: 16, speed: 0.5, color: '#f4a261', audioVal: audio.bass },
-    { name: 'Saturn', dist: 280, size: 13, speed: 0.3, color: '#e9c46a', audioVal: audio.bass, hasRing: true },
-    { name: 'Uranus', dist: 330, size: 10, speed: 0.2, color: '#80ed99', audioVal: audio.treble },
-    { name: 'Neptune', dist: 370, size: 10, speed: 0.15, color: '#4361ee', audioVal: audio.mid },
+  // 13 Celestial Bodies corresponding to 13 Musical Notes (C4 to C5)
+  const noteBodies = [
+    { note: 'C', name: 'Vulcan Core', dist: 45, size: 4, speed: 2.8, color: '#ff4d00', binIdx: 0 },
+    { note: 'C#', name: 'Mercury', dist: 70, size: 5, speed: 2.3, color: '#ced4da', binIdx: 2 },
+    { note: 'D', name: 'Venus', dist: 100, size: 7, speed: 1.8, color: '#f77f00', binIdx: 4 },
+    { note: 'D#', name: 'Earth & Moon', dist: 135, size: 8, speed: 1.4, color: '#48cae4', binIdx: 6, hasMoon: true },
+    { note: 'E', name: 'Mars', dist: 170, size: 6, speed: 1.1, color: '#e63946', binIdx: 8 },
+    { note: 'F', name: 'Ceres Asteroid', dist: 205, size: 5, speed: 0.9, color: '#d4a373', binIdx: 10, isAsteroid: true },
+    { note: 'F#', name: 'Jupiter', dist: 245, size: 15, speed: 0.7, color: '#f4a261', binIdx: 12, hasSpot: true },
+    { note: 'G', name: 'Saturn', dist: 290, size: 12, speed: 0.5, color: '#e9c46a', binIdx: 14, hasRing: true },
+    { note: 'G#', name: 'Uranus', dist: 335, size: 10, speed: 0.4, color: '#80ed99', binIdx: 16 },
+    { note: 'A', name: 'Neptune', dist: 380, size: 10, speed: 0.3, color: '#4361ee', binIdx: 18 },
+    { note: 'A#', name: 'Pluto & Charon', dist: 420, size: 5, speed: 0.22, color: '#a2d2ff', binIdx: 20 },
+    { note: 'B', name: 'Eris', dist: 455, size: 5, speed: 0.16, color: '#f8f9fa', binIdx: 22 },
+    { note: 'C5', name: 'Sedna Kuiper', dist: 490, size: 6, speed: 0.11, color: '#ff70a6', binIdx: 24 },
   ];
 
-  const maxPlanets = pSettings.quality === 'low' ? 5 : planets.length;
+  const rawData = audio.rawFrequencyData;
+  const maxBodies = pSettings.quality === 'low' ? 8 : noteBodies.length;
 
-  for (let p = 0; p < maxPlanets; p++) {
-    const pl = planets[p];
-    const orbitR = pl.dist * baseScale * 180;
+  for (let b = 0; b < maxBodies; b++) {
+    const pl = noteBodies[b];
+    const orbitR = pl.dist * baseScale * 170;
 
-    // Orbit Ring
-    c.strokeStyle = rgba('#ffffff', 0.12 + pl.audioVal * 0.25);
-    c.lineWidth = 1;
+    // Extract frequency energy for this note's bin
+    const freqBin = Math.min(rawData.length - 1, pl.binIdx * 3);
+    const rawVal = rawData[freqBin] || 0;
+    const noteEnergy = (rawVal / 255) * vSettings.intensity;
+
+    // Orbit Ring with Audio-Reactive Note Glow
+    const ringAlpha = 0.08 + noteEnergy * 0.6;
+    c.strokeStyle = noteEnergy > 0.4 ? pl.color : rgba('#ffffff', ringAlpha);
+    c.lineWidth = noteEnergy > 0.5 ? 2.5 : 1;
     c.beginPath();
     c.ellipse(0, 0, orbitR, orbitR * 0.45, 0, 0, Math.PI * 2);
     c.stroke();
 
-    // Planet Position
-    const angle = time * pl.speed * vSettings.speed * 0.6;
+    // Planet Position along orbit
+    const angle = time * pl.speed * vSettings.speed * 0.5 + b * 0.48;
     const px = Math.cos(angle) * orbitR;
     const py = Math.sin(angle) * (orbitR * 0.45);
 
-    // Saturn Ring
-    if (pl.hasRing) {
-      c.strokeStyle = rgba('#e9c46a', 0.7);
-      c.lineWidth = 3;
+    // Audio Pulse Radial Wave when note triggers
+    if (noteEnergy > 0.35) {
+      const shockR = (pl.size * 2 + noteEnergy * 25) * vSettings.scale;
+      c.strokeStyle = rgba(pl.color, 1 - noteEnergy * 0.8);
+      c.lineWidth = 1.5;
       c.beginPath();
-      c.ellipse(px, py, pl.size * 2, pl.size * 0.8, -0.3, 0, Math.PI * 2);
+      safeArc(c, px, py, shockR);
       c.stroke();
     }
 
-    // Planet Circle
-    c.fillStyle = pl.color;
+    // Saturn Ring
+    if (pl.hasRing) {
+      c.strokeStyle = rgba('#e9c46a', 0.8);
+      c.lineWidth = 3.5;
+      c.beginPath();
+      c.ellipse(px, py, pl.size * 2.2, pl.size * 0.85, -0.25, 0, Math.PI * 2);
+      c.stroke();
+    }
+
+    // Planet Body
+    const planetR = pl.size * (1 + noteEnergy * 0.8) * vSettings.scale;
+    const pGrad = safeRadialGradient(c, px - planetR * 0.3, py - planetR * 0.3, 1, px, py, planetR);
+    pGrad.addColorStop(0, '#ffffff');
+    pGrad.addColorStop(0.5, pl.color);
+    pGrad.addColorStop(1, '#050508');
+
+    c.fillStyle = pGrad;
     c.beginPath();
-    safeArc(c, px, py, pl.size * (1 + pl.audioVal * 0.4));
+    safeArc(c, px, py, planetR);
     c.fill();
+
+    // Earth's Moon
+    if (pl.hasMoon) {
+      const mAngle = time * 3.5;
+      const mx = px + Math.cos(mAngle) * (planetR * 2.2);
+      const my = py + Math.sin(mAngle) * (planetR * 1.1);
+      c.fillStyle = '#e9ecef';
+      c.beginPath();
+      safeArc(c, mx, my, 2.5);
+      c.fill();
+    }
+
+    // Note Tag Label (C, D#, A, etc.)
+    if (pSettings.quality !== 'low') {
+      c.fillStyle = rgba('#ffffff', 0.6 + noteEnergy * 0.4);
+      c.font = '9px monospace';
+      c.fillText(pl.note, px + planetR + 3, py + 3);
+    }
   }
 
   c.restore();

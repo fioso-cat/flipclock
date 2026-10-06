@@ -118,6 +118,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     'clock' | 'audio' | 'visualizer' | 'color' | 'background' | 'performance' | 'general'
   >('visualizer');
 
+  const [presetCategoryFilter, setPresetCategoryFilter] = useState<string>('All');
+
   if (!isVisible) return null;
 
   const tabs = [
@@ -718,12 +720,33 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         {/* ================= VISUALIZER TAB ================= */}
         {activeTab === 'visualizer' && (
           <div className="space-y-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-800 pb-1">
-              Select Preset
-            </h3>
+            <div className="flex items-center justify-between border-b border-slate-800 pb-1">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                Select Preset ({PRESET_LIST.length} Total)
+              </h3>
+            </div>
 
-            <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
-              {PRESET_LIST.map((p) => {
+            {/* Category Filter Pills */}
+            <div className="flex flex-wrap gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 text-[11px]">
+              {['All', 'Planets', 'Cyber', 'Elements', 'Spectrum'].map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setPresetCategoryFilter(cat)}
+                  className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                    presetCategoryFilter === cat
+                      ? 'bg-cyan-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  }`}
+                >
+                  {cat === 'All' ? '🌟 All' : cat === 'Planets' ? '🪐 Space' : cat === 'Cyber' ? '🕶️ Cyber' : cat === 'Elements' ? '🌊 Nature' : '📊 Wave'}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1">
+              {PRESET_LIST.filter(
+                (p) => presetCategoryFilter === 'All' || p.category === presetCategoryFilter
+              ).map((p) => {
                 const isSelected = settings.visualizer.preset === p.id;
                 return (
                   <button
@@ -736,12 +759,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     }
                     className={`flex items-center space-x-2 p-2.5 rounded-xl border text-left transition-all ${
                       isSelected
-                        ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold shadow-md'
+                        ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold shadow-md ring-1 ring-cyan-500/50'
                         : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:bg-slate-800/60'
                     }`}
                   >
                     <span className="text-base">{p.icon}</span>
-                    <span className="truncate">{p.label}</span>
+                    <span className="truncate text-xs">{p.label}</span>
                   </button>
                 );
               })}

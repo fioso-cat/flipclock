@@ -98,8 +98,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     baseOpacity: 0.2,
   },
   performance: {
-    quality: 'medium',
-    fps: 30,
+    quality: 'high',
+    fps: 60,
     particleDensity: 1.0,
     resolutionScale: 1.0,
   },
